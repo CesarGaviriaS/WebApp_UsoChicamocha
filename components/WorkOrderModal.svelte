@@ -1,5 +1,6 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
+  // import { data } from '../stores/data.js'; // No longer needed if workers/areas are not used
 
   // --- PROPS (Svelte 4 syntax) ---
   export let rowData = null;
@@ -52,10 +53,6 @@
   $: workOrderForm.maquinaInvolucrada = rowData?.maquina || '';
   $: workOrderForm.componenteInvolucrado = column;
   $: workOrderForm.quienAsigna = currentUser;
-
-  // --- CONSTANTS ---
-  const trabajadores = [ 'Juan Pérez - Mecánico', /* ...otros... */ ];
-  const areas = [ 'Grupo 1 - Excavadoras', /* ...otros... */ ];
 
   // --- FUNCTIONS ---
   function getStatusClass(status) {
@@ -137,12 +134,7 @@
         <div class="form-row">
           <div class="form-group">
             <label for="areaTrabajoAsignada">Área de Trabajo:</label>
-            <select bind:value={workOrderForm.areaTrabajoAsignada} id="areaTrabajoAsignada" required>
-              <option value="">Seleccionar área...</option>
-              {#each areas as area}
-                <option value={area}>{area}</option>
-              {/each}
-            </select>
+            <input type="text" bind:value={workOrderForm.areaTrabajoAsignada} id="areaTrabajoAsignada" placeholder="Área de Trabajo" required />
           </div>
           <div class="form-group">
             <label for="prioridad">Prioridad:</label>
@@ -162,12 +154,7 @@
           </div>
           <div class="form-group">
             <label for="asignadoA">Asignado A:</label>
-            <select bind:value={workOrderForm.asignadoA} id="asignadoA" required>
-              <option value="">Seleccionar trabajador...</option>
-              {#each trabajadores as trabajador}
-                <option value={trabajador}>{trabajador}</option>
-              {/each}
-            </select>
+            <input type="text" bind:value={workOrderForm.asignadoA} id="asignadoA" placeholder="Asignado A" required />
           </div>
         </div>
         <div class="form-row">

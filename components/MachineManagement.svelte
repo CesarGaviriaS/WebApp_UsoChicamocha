@@ -1,13 +1,13 @@
 <script>
-  // Se elimina 'onMount' porque App.svelte ahora se encarga de pedir los datos.
   import { data } from '../stores/data.js';
 
   // --- LOCAL STATE (Svelte 4 syntax) ---
   // Se leen los datos directamente del store en el HTML usando '$data'
   let isSubmitting = false;
+  let errorMessage = ''; // New error message variable
   const initialMachineState = {
-    nombre: '', modelo: '', num_motor: '', num_inter_identificacion: '',
-    marca: '', soat: '', runt: '', usuarios_id: null
+    name: '', model: '', numEngine: '', numInterIdentification: '',
+    brand: '', soat: '', runt: ''
   };
   let newMachine = { ...initialMachineState };
   let editingMachine = null;
@@ -18,11 +18,13 @@
   async function handleCreateMachine(event) {
     event.preventDefault();
     isSubmitting = true;
+    errorMessage = ''; // Clear previous errors
     try {
       await data.createMachine(newMachine);
       newMachine = { ...initialMachineState };
     } catch (e) {
       console.error("Fallo al crear máquina:", e);
+      errorMessage = e.message || 'Error al crear máquina.'; // Set error message
     } finally {
       isSubmitting = false;
     }
@@ -32,11 +34,13 @@
     event.preventDefault();
     if (!editingMachine) return;
     isSubmitting = true;
+    errorMessage = ''; // Clear previous errors
     try {
       await data.updateMachine(editingMachine);
       closeEditModal();
     } catch (e) {
       console.error("Fallo al actualizar máquina:", e);
+      errorMessage = e.message || 'Error al actualizar máquina.'; // Set error message
     } finally {
       isSubmitting = false;
     }
@@ -44,11 +48,13 @@
 
   async function handleDeleteMachine() {
     if (!machineToDelete) return;
+    errorMessage = ''; // Clear previous errors
     try {
       await data.deleteMachine(machineToDelete.id);
       machineToDelete = null;
     } catch (e) {
       console.error("Fallo al eliminar máquina:", e);
+      errorMessage = e.message || 'Error al eliminar máquina.'; // Set error message
     }
   }
 
@@ -60,6 +66,7 @@
   function closeEditModal() {
     showEditModal = false;
     editingMachine = null;
+    errorMessage = ''; // Clear error when closing modal
   }
 </script>
 
@@ -67,23 +74,26 @@
   <div class="form-container">
     <h3>Crear Nueva Máquina</h3>
     <form class="create-form" on:submit={handleCreateMachine}>
-      <input type="text" placeholder="Nombre" bind:value={newMachine.nombre} required disabled={isSubmitting} />
-      <input type="text" placeholder="Marca" bind:value={newMachine.marca} disabled={isSubmitting} />
-      <input type="text" placeholder="Modelo" bind:value={newMachine.modelo} required disabled={isSubmitting} />
-      <input type="text" placeholder="Núm. Motor" bind:value={newMachine.num_motor} disabled={isSubmitting} />
-      <input type="text" placeholder="Núm. Identificación" bind:value={newMachine.num_inter_identificacion} disabled={isSubmitting} />
-      <input type="text" placeholder="SOAT" bind:value={newMachine.soat} disabled={isSubmitting} />
-      <input type="text" placeholder="RUNT" bind:value={newMachine.runt} disabled={isSubmitting} />
-      <select bind:value={newMachine.usuarios_id} disabled={isSubmitting}>
-        <option value={null}>Asignar a...</option>
-        {#each $data.users as user (user.id)}
-          <option value={user.id}>{user.full_name}</option>
-        {/each}
-      </select>
+      <input type="text" placeholder="Nombre" bind:value={newMachine.name} required disabled={isSubmitting} />
+      <input type="text" placeholder="Marca" bind:value={newMachine.brand} disabled={isSubmitting} />
+      <input type="text" placeholder="Modelo" bind:value={newMachine.model} required disabled={isSubmitting} />
+      <input type="text" placeholder="Núm. Motor" bind:value={newMachine.numEngine} disabled={isSubmitting} />
+      <input type="text" placeholder="Núm. Identificación" bind:value={newMachine.numInterIdentification} disabled={isSubmitting} />
+      <div class="form-group">
+        <label for="newSoat">SOAT:</label>
+        <input type="date" id="newSoat" bind:value={newMachine.soat} disabled={isSubmitting} />
+      </div>
+      <div class="form-group">
+        <label for="newRunt">RUNT:</label>
+        <input type="date" id="newRunt" bind:value={newMachine.runt} disabled={isSubmitting} />
+      </div>
       <button type="submit" class="btn-create" disabled={isSubmitting}>
         {isSubmitting ? 'Creando...' : 'Crear'}
       </button>
     </form>
+    {#if errorMessage}
+      <p class="error-message">{errorMessage}</p>
+    {/if}
   </div>
 
   <div class="table-wrapper">
@@ -110,11 +120,11 @@
           {#each $data.machines as machine (machine.id)}
             <tr>
               <td>{machine.id}</td>
-              <td>{machine.nombre}</td>
-              <td>{machine.marca}</td>
-              <td>{machine.modelo}</td>
-              <td>{machine.num_motor}</td>
-              <td>{machine.num_inter_identificacion}</td>
+              <td>{machine.name}</td>
+              <td>{machine.brand}</td>
+              <td>{machine.model}</td>
+              <td>{machine.numEngine}</td>
+              <td>{machine.numInterIdentification}</td>
               <td>{machine.soat}</td>
               <td>{machine.runt}</td>
               <td class="actions">
@@ -138,27 +148,22 @@
         <button class="close-btn" on:click={closeEditModal}>×</button>
       </div>
       <form class="modal-form" on:submit={handleUpdateMachine}>
-        <label>Nombre: <input type="text" bind:value={editingMachine.nombre} required /></label>
-        <label>Marca: <input type="text" bind:value={editingMachine.marca} /></label>
-        <label>Modelo: <input type="text" bind:value={editingMachine.modelo} required /></label>
-        <label>Núm. Motor: <input type="text" bind:value={editingMachine.num_motor} /></label>
-        <label>Núm. Identificación: <input type="text" bind:value={editingMachine.num_inter_identificacion} /></label>
-        <label>SOAT: <input type="text" bind:value={editingMachine.soat} /></label>
-        <label>RUNT: <input type="text" bind:value={editingMachine.runt} /></label>
-        <label>Asignado a:
-          <select bind:value={editingMachine.usuarios_id}>
-            <option value={null}>Sin asignar</option>
-            {#each $data.users as user (user.id)}
-              <option value={user.id}>{user.full_name}</option>
-            {/each}
-          </select>
-        </label>
+        <label>Nombre: <input type="text" bind:value={editingMachine.name} required /></label>
+        <label>Marca: <input type="text" bind:value={editingMachine.brand} /></label>
+        <label>Modelo: <input type="text" bind:value={editingMachine.model} required /></label>
+        <label>Núm. Motor: <input type="text" bind:value={editingMachine.numEngine} /></label>
+        <label>Núm. Identificación: <input type="text" bind:value={editingMachine.numInterIdentification} /></label>
+        <label>SOAT: <input type="date" bind:value={editingMachine.soat} /></label>
+        <label>RUNT: <input type="date" bind:value={editingMachine.runt} /></label>
         <div class="modal-actions">
           <button type="button" class="btn-cancel" on:click={closeEditModal}>Cancelar</button>
           <button type="submit" class="btn-save" disabled={isSubmitting}>
             {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
           </button>
         </div>
+        {#if errorMessage}
+          <p class="error-message">{errorMessage}</p>
+        {/if}
       </form>
     </div>
   </div>
@@ -169,7 +174,7 @@
   <div class="modal-overlay" on:click={() => machineToDelete = null}>
     <div class="modal-content confirmation" on:click|stopPropagation>
       <h3>Confirmar Eliminación</h3>
-      <p>¿Está seguro que desea eliminar la máquina "{machineToDelete.nombre} {machineToDelete.modelo}"?</p>
+      <p>¿Está seguro que desea eliminar la máquina "{machineToDelete.name} {machineToDelete.model}"?</p>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" on:click={() => machineToDelete = null}>Cancelar</button>
         <button type="button" class="btn-delete" on:click={handleDeleteMachine}>Sí, Eliminar</button>

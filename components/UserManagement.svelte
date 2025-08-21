@@ -3,9 +3,10 @@
 
   // --- LOCAL STATE (Svelte 4 syntax) ---
   let isSubmitting = false;
+  let errorMessage = ''; // New error message variable
   let newUser = {
     username: '',
-    gmail: '',
+    email: '',
     fullName: '',
     password: '',
     role: 'Mecanico'
@@ -15,21 +16,25 @@
   async function handleCreateUser(event) {
     event.preventDefault();
     isSubmitting = true;
+    errorMessage = ''; // Clear previous errors
     try {
       await data.createUser(newUser);
-      newUser = { username: '', gmail: '', fullName: '', password: '', role: 'Mecanico' };
+      newUser = { username: '', email: '', fullName: '', password: '', role: 'Mecanico' };
     } catch (e) {
       console.error("Fallo al crear usuario:", e);
+      errorMessage = e.message || 'Error al crear usuario.'; // Set error message
     } finally {
       isSubmitting = false;
     }
   }
 
   async function handleToggleStatus(user) {
+    errorMessage = ''; // Clear previous errors
     try {
       await data.toggleUserStatus(user);
     } catch (e) {
       console.error("Fallo al cambiar estado:", e);
+      errorMessage = e.message || 'Error al cambiar estado del usuario.'; // Set error message
     }
   }
 </script>
@@ -39,7 +44,7 @@
     <h3>Crear Nuevo Usuario</h3>
     <form class="create-form" on:submit={handleCreateUser}>
       <input type="text" placeholder="Nombre de usuario" bind:value={newUser.username} required disabled={isSubmitting} />
-      <input type="email" placeholder="Gmail" bind:value={newUser.gmail} disabled={isSubmitting} />
+      <input type="email" placeholder="Gmail" bind:value={newUser.email} disabled={isSubmitting} />
       <input type="text" placeholder="Nombre completo" bind:value={newUser.fullName} required disabled={isSubmitting} />
       <input type="password" placeholder="Contraseña" bind:value={newUser.password} required disabled={isSubmitting} />
       <select bind:value={newUser.role} required disabled={isSubmitting}>
@@ -51,6 +56,9 @@
         {isSubmitting ? 'Creando...' : 'Crear'}
       </button>
     </form>
+    {#if errorMessage}
+      <p class="error-message">{errorMessage}</p>
+    {/if}
   </div>
 
   <div class="table-wrapper">
@@ -76,17 +84,17 @@
             <tr>
               <td>{user.id}</td>
               <td>{user.username}</td>
-              <td>{user.gmail}</td>
-              <td>{user.full_name}</td>
+              <td>{user.email}</td>
+              <td>{user.fullName}</td>
               <td>{user.role}</td>
               <td>
-                <span class="status-badge" class:active={user.status === 'activo'}>
-                  {user.status}
+                <span class="status-badge" class:active={user.status}>
+                  {user.status ? 'Activo' : 'Inactivo'}
                 </span>
               </td>
               <td>
                 <button class="btn-toggle" on:click={() => handleToggleStatus(user)}>
-                  {user.status === 'activo' ? 'Desactivar' : 'Activar'}
+                  {user.status ? 'Desactivar' : 'Activar'}
                 </button>
               </td>
             </tr>

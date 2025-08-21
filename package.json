@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@tanstack/svelte-table": "^8.21.3",
+    "jwt-decode": "^4.0.0",
     "lucide-svelte": "^0.400.0"
   }
 }

@@ -35,9 +35,15 @@
     ui.openWorkOrderModal(data, column);
   }
 
-  function handleCreateWorkOrder(workOrderData) {
-    console.log('Creando orden de trabajo:', workOrderData);
-    ui.closeWorkOrderModal();
+  async function handleCreateWorkOrder(workOrderData) {
+    try {
+      await data.createWorkOrder(workOrderData);
+      console.log('Orden de trabajo creada con éxito:', workOrderData);
+      ui.closeWorkOrderModal();
+    } catch (error) {
+      console.error('Error al crear orden de trabajo:', error);
+      // Optionally, display an error message to the user
+    }
   }
 
   function handleCancelWorkOrder() {
