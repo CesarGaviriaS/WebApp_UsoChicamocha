@@ -18,6 +18,8 @@
 
   // --- STATE ---
   let filterText = "";
+  let startDate = null;
+  let endDate = null;
   const PAGE_SIZE = 20;
   const STATUS_VALUES = ["Óptimo", "Regular", "Malo"];
   const STATUS_CLASSES = {
@@ -44,102 +46,160 @@
 
   // --- COLUMNAS ---
   const estadosColumns = [
-    { accessorKey: "fecha", header: "Fecha", size: 80 },
-    { accessorKey: "hora", header: "Hora", size: 50 },
-    { accessorKey: "maquina", header: "MÁQUINA", size: 250 },
-    { accessorKey: "horometro", header: "Horómetro", size: 80 },
     {
-      accessorKey: "fugas",
+      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }),
+      id: "fecha",
+      header: "Fecha",
+      size: 80,
+      sortingFn: (rowA, rowB, columnId) => {
+          const dateA = new Date(rowA.original.dateStamp + 'Z');
+          const dateB = new Date(rowB.original.dateStamp + 'Z');
+          return dateA.getTime() - dateB.getTime();
+      },
+    },
+    {
+      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleTimeString('en-GB', { timeZone: 'America/Bogota' }), // Formato 24h
+      id: "hora",
+      header: "Hora",
+      size: 50,
+    },
+    {
+      accessorFn: (row) => `${row.machine.name} ${row.machine.model} ${row.machine.numInterIdentification}`,
+      id: "maquina",
+      header: "MÁQUINA",
+      size: 250,
+    },
+    { accessorKey: "hourMeter", header: "Horómetro", size: 80 },
+    {
+      accessorKey: "leakStatus",
       header: "Fugas Sistema",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "frenos",
+      accessorKey: "brakeStatus",
       header: "Sistema Frenos",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "correas",
+      accessorKey: "beltsPulleysStatus",
       header: "Correas y Poleas",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "llantas",
+      accessorKey: "tireLanesStatus",
       header: "Llantas/Carriles",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "encendido",
+      accessorKey: "carIgnitionStatus",
       header: "Sistema Encendido",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "electrico",
+      accessorKey: "electricalStatus",
       header: "Sistema Eléctrico",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "mecanico",
+      accessorKey: "mechanicalStatus",
       header: "Sistema Mecánico",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "temperatura",
+      accessorKey: "temperatureStatus",
       header: "Nivel Temperatura",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "aceite",
+      accessorKey: "oilStatus",
       header: "Nivel Aceite",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "hidraulico",
+      accessorKey: "hydraulicStatus",
       header: "Nivel Hidráulico",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "refrigerante",
+      accessorKey: "coolantStatus",
       header: "Nivel Refrigerante",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "estructural",
+      accessorKey: "structuralStatus",
       header: "Estado Estructural",
       size: 100,
       meta: { isStatus: true },
     },
     {
-      accessorKey: "extintor",
+      accessorKey: "expirationDateFireExtinguisher",
       header: "Vigencia Extintor",
       size: 110,
       meta: { isDateStatus: true },
     },
     {
-      accessorKey: "observaciones",
+      accessorKey: "observations",
       header: "Observaciones",
       size: 350,
       meta: { isMultiline: true },
     },
-    { accessorKey: "responsable", header: "Responsable", size: 160 },
+    {
+      accessorKey: "greasingAction",
+      header: "Acción de Engrase",
+      size: 150,
+    },
+    {
+      accessorKey: "greasingObservations",
+      header: "Observaciones de Engrase",
+      size: 350,
+      meta: { isMultiline: true },
+    },
+    {
+      accessorFn: (row) => row.user.fullName,
+      id: "responsable",
+      header: "Responsable",
+      size: 160,
+    },
   ];
 
   $: columns = tableType === "estados" ? estadosColumns : [];
 
+  $: filteredData = (() => {
+    if (!startDate && !endDate) {
+      return data;
+    }
+    return data.filter(item => {
+      // Get the date string for the item in Colombia timezone (YYYY-MM-DD format)
+      const itemDateInColombia = new Date(item.dateStamp + 'Z').toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+      let passesStartDate = true;
+      if (startDate) {
+        passesStartDate = itemDateInColombia >= startDate;
+      }
+
+      let passesEndDate = true;
+      if (endDate) {
+        passesEndDate = itemDateInColombia <= endDate;
+      }
+      
+      return passesStartDate && passesEndDate;
+    });
+  })();
+
   let table = null;
   $: if (Array.isArray(columns)) {
-    const safeData = Array.isArray(data) ? data : [];
+    const safeData = Array.isArray(filteredData) ? filteredData : [];
     table = createSvelteTable({
       data: safeData,
       columns,
@@ -153,8 +213,44 @@
       getFilteredRowModel: getFilteredRowModel(),
       getSortedRowModel: getSortedRowModel(),
       getPaginationRowModel: getPaginationRowModel(),
-      initialState: { pagination: { pageSize: PAGE_SIZE } },
+      initialState: {
+        pagination: { pageSize: PAGE_SIZE },
+        sorting: [{ id: 'fecha', desc: true }, { id: 'hora', desc: true }],
+      },
     });
+  }
+
+  let keepDateSort = false;
+
+  function handleHeaderClick(event, column) {
+    const currentSorting = $table.getState().sorting;
+
+    // If the checkbox is checked and we are not clicking the date column
+    if (keepDateSort && column.id !== 'fecha') {
+        // Find the current date sort to preserve its direction
+        let dateSort = currentSorting.find(s => s.id === 'fecha');
+        // If date is not sorted for some reason, add it as default
+        if (!dateSort) {
+            dateSort = { id: 'fecha', desc: true };
+        }
+
+        let newSorting = [dateSort];
+
+        // Check if the clicked column is already the secondary sort
+        const secondarySort = currentSorting.length > 1 ? currentSorting[1] : null;
+        if (secondarySort && secondarySort.id === column.id) {
+            // If it is, toggle its direction
+            newSorting.push({ id: column.id, desc: !secondarySort.desc });
+        } else {
+            // Otherwise, add it as a new secondary sort (defaulting to ascending)
+            newSorting.push({ id: column.id, desc: false });
+        }
+        $table.setSorting(newSorting);
+    } else {
+        // Default behavior: use shift key for multi-sort.
+        // This also handles clicking on the 'fecha' column itself.
+        column.getToggleSortingHandler()(event);
+    }
   }
 
   function getHeaderContent(header) {
@@ -196,13 +292,21 @@
       id="filter"
       type="text"
       bind:value={filterText}
-      placeholder="Buscar..."
+      placeholder="Buscar en toda la tabla..."
       class="filter-input"
     />
+
+    <div class="date-filter-container">
+      <label for="start-date">Desde:</label>
+      <input type="date" id="start-date" bind:value={startDate} class="date-input" />
+      <label for="end-date">Hasta:</label>
+      <input type="date" id="end-date" bind:value={endDate} class="date-input" />
+      <button on:click={() => { startDate = null; endDate = null; }} class="clear-date-btn">Limpiar</button>
+    </div>
+
     <span class="filter-info">
       {#if table}
-        Mostrando {$table.getPaginationRowModel().rows.length} de {$table.getFilteredRowModel()
-          .rows.length} registros
+        Mostrando {$table.getPaginationRowModel().rows.length} de {$table.getCoreRowModel().rows.length} registros
       {:else}
         Cargando tabla...
       {/if}
@@ -226,13 +330,23 @@
                 <th
                   style="width: {header.getSize()}px;"
                   class="header-cell"
-                  on:click={header.column.getToggleSortingHandler()}
+                  on:click={(event) => handleHeaderClick(event, header.column)}
                 >
                   <div class="header-content">
                     {#if header.isPlaceholder}
                       &nbsp;
                     {:else}
                       {@const content = getHeaderContent(header)}
+
+                      {#if header.id === 'fecha'}
+                        <input
+                          type="checkbox"
+                          bind:checked={keepDateSort}
+                          on:click|stopPropagation
+                          title="Mantener ordenamiento de fecha"
+                          style="margin-right: 5px;"
+                        />
+                      {/if}
 
                       {#if typeof content === "string" || typeof content === "number"}
                         {content}
@@ -260,7 +374,10 @@
         </thead>
         <tbody>
           {#each $table.getPaginationRowModel().rows as row, rowIndex}
-            <tr class="data-row {rowIndex % 2 === 0 ? 'even' : 'odd'}">
+            <tr
+              class="data-row {rowIndex % 2 === 0 ? 'even' : 'odd'}"
+              class:unexpected-row={row.original.isUnexpected}
+            >
               {#each row.getVisibleCells() as cell}
                 <td
                   class="data-cell"
@@ -434,8 +551,14 @@
   .data-row.odd {
     background: #fff;
   }
+  .data-row.unexpected-row {
+    background-color: #ffdddd; /* Rojo muy tenue */
+  }
   .data-row:hover {
-    background: #e8e8e8 !important;
+    background: #e8e8e8; /* Default hover for non-unexpected rows */
+  }
+  .data-row.unexpected-row:hover {
+    background-color: #ffaaaa; /* A more intense red for unexpected rows on hover */
   }
   .data-cell {
     padding: 8px 12px;
@@ -490,5 +613,21 @@
     align-items: center;
     padding: 6px 16px;
     font-size: 10px;
+  }
+  .date-filter-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 16px;
+  }
+  .date-input {
+    padding: 2px 4px;
+    border: 1px inset #c0c0c0;
+  }
+  .clear-date-btn {
+    padding: 4px 8px;
+    border: 1px outset #c0c0c0;
+    background: linear-gradient(#e0e0e0, #c0c0c0);
+    cursor: pointer;
   }
 </style>

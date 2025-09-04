@@ -1,52 +1,105 @@
 import { writable } from 'svelte/store';
-import { jwtDecode } from "jwt-decode"; 
+import { jwtDecode } from "jwt-decode";
 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL; 
+// Helper function to manage tokens and user data in one place
+function setSession(accessToken, refreshToken, decodedPayload) {
+  const userRole = (decodedPayload.role || '').replace(/[\[\]']+/g, '').replace('ROLE_', '');
+  
+  localStorage.setItem('accessToken', accessToken);
+  if (refreshToken) {
+    localStorage.setItem('refreshToken', refreshToken);
+  }
+  localStorage.setItem('userName', decodedPayload.sub);
+  localStorage.setItem('userRole', userRole);
+
+  return { name: decodedPayload.sub, role: userRole };
+}
+
+// Helper function to clear session data
+function clearSession() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('userName');
+  localStorage.removeItem('userRole');
+}
 
 function createAuthStore() {
   const { subscribe, set } = writable({
     isAuthenticated: false,
-    currentUser: null, // Guardará { name, role }
+    currentUser: null,
   });
+
+  // --- Refresh Token Logic ---
+  async function refreshToken() {
+    console.log("Intentando renovar el token de acceso...");
+    const storedRefreshToken = localStorage.getItem('refreshToken');
+    if (!storedRefreshToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${BASE_URL}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: storedRefreshToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to refresh token');
+      }
+
+      const data = await response.json();
+      if (!data.status || !data.jwt) {
+        throw new Error('Invalid refresh response');
+      }
+
+      const newAccessToken = data.jwt;
+      const newDecodedPayload = jwtDecode(newAccessToken);
+      
+      // Set the new session with the new access token, keeping the same refresh token
+      const currentUser = setSession(newAccessToken, storedRefreshToken, newDecodedPayload);
+      set({ isAuthenticated: true, currentUser });
+      
+      return true;
+
+    } catch (error) {
+      console.error("Refresh token failed:", error);
+      // If refresh fails, clear everything to force re-login
+      clearSession();
+      set({ isAuthenticated: false, currentUser: null });
+      return false;
+    }
+  }
 
   return {
     subscribe,
     login: async (username, password) => {
       try {
-        // <-- 3. URL y cuerpo de la petición actualizados
         const response = await fetch(`${BASE_URL}/api/v1/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: username, password: password }) 
+          body: JSON.stringify({ username, password }),
         });
-         // ======================= CAMBIO CLAVE =======================
-    // 1. Verificamos si la respuesta NO fue exitosa (ej. 401, 403, 500)
-    if (!response.ok) {
-        // Imprimimos el status para saber qué error fue (ej. 401)
-        console.error('Error de autenticación, Status:', response.status); 
-        throw new Error('Usuario o contraseña incorrectos.');
-    }
-    // ====
 
-        const data = await response.json();
-        if (!data.status) {
-          throw new Error(data.message || 'Error al iniciar sesión.');
+        if (!response.ok) {
+          console.error('Authentication error, Status:', response.status);
+          throw new Error('Incorrect username or password.');
         }
 
-        const token = data.jwt;
-        const decodedPayload = jwtDecode(token); // <-- 4. Decodificamos el token
+        const data = await response.json();
+        if (!data.status || !data.jwt || !data.refreshToken) {
+          throw new Error(data.message || 'Login failed.');
+        }
 
-        // <-- 5. Verificamos el rol desde el payload del token
-        const rawRole = decodedPayload.role || '';
-        const userRole = rawRole.replace(/[\[\]']+/g, '').replace('ROLE_', '');
+        const accessToken = data.jwt;
+        const newRefreshToken = data.refreshToken;
+        const decodedPayload = jwtDecode(accessToken);
 
-        // <-- 6. Guardamos el nuevo token y los datos del usuario decodificados
-        localStorage.setItem('accessToken', token);
-        localStorage.setItem('userName', decodedPayload.sub); // El nombre de usuario está en 'sub'
-        localStorage.setItem('userRole', userRole);
-        
-        set({ isAuthenticated: true, currentUser: { name: decodedPayload.sub, role: userRole } });
+        const currentUser = setSession(accessToken, newRefreshToken, decodedPayload);
+        set({ isAuthenticated: true, currentUser });
+
         return { success: true, error: null };
 
       } catch (err) {
@@ -54,13 +107,10 @@ function createAuthStore() {
       }
     },
     logout: () => {
-      // <-- 7. Es más seguro remover items específicos que limpiar todo
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('userRole');
+      clearSession();
       set({ isAuthenticated: false, currentUser: null });
     },
-    checkAuth: () => {
+    checkAuth: async () => {
       const token = localStorage.getItem('accessToken');
       if (!token) {
         set({ isAuthenticated: false, currentUser: null });
@@ -68,30 +118,31 @@ function createAuthStore() {
       }
 
       try {
-        // <-- 8. Verificamos la validez y expiración del token al cargar la app
         const decodedPayload = jwtDecode(token);
         const isExpired = decodedPayload.exp * 1000 < Date.now();
 
         if (isExpired) {
-          // Si el token ha expirado, cerramos la sesión
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('userName');
-          localStorage.removeItem('userRole');
-          set({ isAuthenticated: false, currentUser: null });
-          return false;
+          console.log("Token de acceso expirado, intentando renovar...");
+          // Token is expired, try to refresh it
+          const refreshed = await refreshToken();
+          return refreshed; // Returns true on success, false on failure
         }
         
-        // Si el token es válido, establecemos el estado de la aplicación
+        // Token is valid, set the application state
         const userRole = localStorage.getItem('userRole');
         set({ isAuthenticated: true, currentUser: { name: decodedPayload.sub, role: userRole } });
         return true;
 
       } catch (error) {
-        // Si el token es inválido por alguna razón
+        // If the token is invalid for any reason
+        clearSession();
         set({ isAuthenticated: false, currentUser: null });
         return false;
       }
-    }
+    },
+    // Expose the refreshToken function in case it needs to be called manually
+    // or from an API interceptor in the future.
+    refreshToken,
   };
 }
 

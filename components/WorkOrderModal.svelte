@@ -1,6 +1,5 @@
 <script>
   import { createEventDispatcher } from 'svelte';
-  // import { data } from '../stores/data.js'; // No longer needed if workers/areas are not used
 
   // --- PROPS (Svelte 4 syntax) ---
   export let rowData = null;
@@ -9,48 +8,70 @@
   
   const dispatch = createEventDispatcher();
 
+  // --- LÓGICA DE FECHA PARA EL EXTINTOR (copiada de DataGrid.svelte) ---
+  function getExtintorStatus(dateString) {
+    if (!dateString || typeof dateString !== "string") return "N/A";
+    const expirationDate = new Date(dateString);
+    expirationDate.setUTCHours(12); // Evitar problemas de zona horaria
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const twoMonthsFromNow = new Date();
+    twoMonthsFromNow.setMonth(twoMonthsFromNow.getMonth() + 2);
+
+    if (expirationDate < today) return "Malo";
+    if (expirationDate <= twoMonthsFromNow) return "Regular";
+    return "Óptimo";
+  }
+
+  // --- DERIVED STATE ---
+  let machineFullName = '';
+  $: if (rowData && rowData.machine) {
+    machineFullName = `${rowData.machine.name} ${rowData.machine.brand} ${rowData.machine.numInterIdentification}`;
+  } else {
+    machineFullName = '';
+  }
+
+  let currentStatus;
+  $: {
+    if (!rowData || !column) {
+      currentStatus = 'Desconocido';
+    } else if (column === 'Vigencia Extintor') {
+      currentStatus = getExtintorStatus(rowData.vigenciaExtintor);
+    } else {
+      const fieldMappings = {
+        'Fugas Sistema': 'estadoFugas',
+        'Sistema Frenos': 'estadoFrenos',
+        'Correas y Poleas': 'estadoCorreasPoleas',
+        'Llantas/Carriles': 'estadoLlantasCarriles',
+        'Sistema Encendido': 'estadoEncendido',
+        'Sistema Eléctrico': 'estadoElectrico',
+        'Sistema Mecánico': 'estadoMecanico',
+        'Nivel Temperatura': 'estadoTemperatura',
+        'Nivel Aceite': 'estadoAceite',
+        'Nivel Hidráulico': 'estadoHidraulico',
+        'Nivel Refrigerante': 'estadoRefrigerante',
+        'Estado Estructural': 'estadoEstructural',
+      };
+      const fieldName = fieldMappings[column];
+      currentStatus = fieldName && rowData[fieldName] ? rowData[fieldName] : 'Desconocido';
+    }
+  }
+
   // --- LOCAL STATE (Svelte 4 syntax) ---
   let workOrderForm = {
     areaTrabajoAsignada: '',
     quienAsigna: currentUser,
     asignadoA: '',
-    maquinaInvolucrada: rowData?.maquina || '',
+    maquinaInvolucrada: machineFullName,
     componenteInvolucrado: column,
     detalles: '',
     prioridad: 'Media'
   };
   let showConfirmation = false;
   
-  // --- DERIVED STATE (Svelte 4 reactive statements) ---
-  let currentStatus;
-  $: {
-    if (!rowData || !column) {
-      currentStatus = 'Desconocido';
-    } else {
-      const fieldMappings = {
-        'Fugas Sistema': 'fugas',
-        'Sistema Frenos': 'frenos',
-        'Correas y Poleas': 'correas',
-        'Llantas/Carriles': 'llantas',
-        'Sistema Encendido': 'encendido',
-        'Sistema Eléctrico': 'electrico',
-        'Sistema Mecánico': 'mecanico',
-        'Nivel Temperatura': 'temperatura',
-        'Nivel Aceite': 'aceite',
-        'Nivel Hidráulico': 'hidraulico',
-        'Nivel Refrigerante': 'refrigerante',
-        'Estado Estructural': 'estructural',
-        'Vigencia Extintor': 'extintor'
-      };
-      const fieldName = fieldMappings[column];
-      // El valor del estado ahora viene directamente de la prop 'value' que pasamos
-      currentStatus = rowData.value || (fieldName ? rowData[fieldName] : 'Desconocido');
-    }
-  }
-
   // --- EFFECT (Svelte 4 reactive statements) ---
   $: workOrderForm.prioridad = getSuggestedPriority(currentStatus);
-  $: workOrderForm.maquinaInvolucrada = rowData?.maquina || '';
+  $: workOrderForm.maquinaInvolucrada = machineFullName;
   $: workOrderForm.componenteInvolucrado = column;
   $: workOrderForm.quienAsigna = currentUser;
 
@@ -117,7 +138,7 @@
       <div class="machine-info">
         <h3>Información de la Máquina</h3>
         <div class="info-grid">
-          <div class="info-item"><strong>Máquina:</strong> {rowData?.maquina}</div>
+          <div class="info-item"><strong>Máquina:</strong> {machineFullName}</div>
           <div class="info-item"><strong>Componente:</strong> {column}</div>
           <div class="info-item">
             <strong>Estado Actual:</strong> 

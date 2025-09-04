@@ -1,116 +1,293 @@
 <script>
-  import { data } from '../stores/data.js';
+  import { data } from "../stores/data.js";
+  import { onDestroy } from "svelte";
 
-  // --- LOCAL STATE (Svelte 4 syntax) ---
+  // --- LOCAL STATE ---
   let isSubmitting = false;
-  let errorMessage = ''; // New error message variable
-  let newUser = {
-    username: '',
-    email: '',
-    fullName: '',
-    password: '',
-    role: 'Mecanico'
+  let errorMessage = "";
+  const initialUserState = {
+    username: "",
+    email: "",
+    fullName: "",
+    password: "",
+    role: "Mecanico",
   };
+  let newUser = { ...initialUserState };
 
-  // --- CRUD FUNCTIONS (llaman al store) ---
+  // --- MODAL STATE ---
+  let userToDelete = null;
+  let showDeleteModal = false;
+  let isDeleteConfirmEnabled = false;
+  let deleteConfirmTimer = null;
+
+  let userToEdit = null;
+  let showEditModal = false;
+  let newPassword = "";
+
+  // --- LIFECYCLE ---
+  onDestroy(() => {
+    if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
+  });
+
+  // --- CRUD FUNCTIONS ---
   async function handleCreateUser(event) {
     event.preventDefault();
     isSubmitting = true;
-    errorMessage = ''; // Clear previous errors
+    errorMessage = "";
     try {
       await data.createUser(newUser);
-      newUser = { username: '', email: '', fullName: '', password: '', role: 'Mecanico' };
+      newUser = { ...initialUserState };
     } catch (e) {
-      console.error("Fallo al crear usuario:", e);
-      errorMessage = e.message || 'Error al crear usuario.'; // Set error message
+      errorMessage = e.message || "Error al crear usuario.";
     } finally {
       isSubmitting = false;
     }
   }
 
-  async function handleToggleStatus(user) {
-    errorMessage = ''; // Clear previous errors
+  async function handleUpdateUser(event) {
+    event.preventDefault();
+    if (!userToEdit) return;
+    isSubmitting = true;
+    errorMessage = "";
     try {
-      await data.toggleUserStatus(user);
+      const updatePromises = [];
+      // Check if user data (non-password) has changed
+      const originalUser = $data.users.find((u) => u.id === userToEdit.id);
+      if (
+        originalUser.username !== userToEdit.username ||
+        originalUser.email !== userToEdit.email
+      ) {
+        updatePromises.push(
+          data.updateUser(userToEdit.id, {
+            username: userToEdit.username,
+            email: userToEdit.email,
+          })
+        );
+      }
+
+      // Check if a new password was entered
+      if (newPassword) {
+        updatePromises.push(
+          data.changeUserPassword(userToEdit.id, newPassword)
+        );
+      }
+
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+      }
+
+      closeEditModal();
     } catch (e) {
-      console.error("Fallo al cambiar estado:", e);
-      errorMessage = e.message || 'Error al cambiar estado del usuario.'; // Set error message
+      errorMessage = e.message || "Error al actualizar usuario.";
+    } finally {
+      isSubmitting = false;
     }
+  }
+
+  async function handleDeleteUser() {
+    if (!userToDelete) return;
+    errorMessage = "";
+    try {
+      await data.deleteUser(userToDelete.id);
+      closeDeleteModal();
+    } catch (e) {
+      errorMessage = e.message || "Error al eliminar usuario.";
+    }
+  }
+
+  // --- MODAL LOGIC ---
+  function openDeleteModal(user) {
+    userToDelete = user;
+    showDeleteModal = true;
+    isDeleteConfirmEnabled = false;
+    deleteConfirmTimer = setTimeout(() => {
+      isDeleteConfirmEnabled = true;
+    }, 3000);
+  }
+
+  function closeDeleteModal() {
+    if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
+    showDeleteModal = false;
+    userToDelete = null;
+  }
+
+  function openEditModal(user) {
+    userToEdit = { ...user };
+    newPassword = "";
+    errorMessage = "";
+    showEditModal = true;
+  }
+
+  function closeEditModal() {
+    showEditModal = false;
+    userToEdit = null;
   }
 </script>
 
 <div class="management-container">
+  <!-- Formulario de Creación (sin cambios) -->
   <div class="form-container">
     <h3>Crear Nuevo Usuario</h3>
     <form class="create-form" on:submit={handleCreateUser}>
-      <input type="text" placeholder="Nombre de usuario" bind:value={newUser.username} required disabled={isSubmitting} />
-      <input type="email" placeholder="Gmail" bind:value={newUser.email} disabled={isSubmitting} />
-      <input type="text" placeholder="Nombre completo" bind:value={newUser.fullName} required disabled={isSubmitting} />
-      <input type="password" placeholder="Contraseña" bind:value={newUser.password} required disabled={isSubmitting} />
+      <input
+        type="text"
+        placeholder="Nombre de usuario"
+        bind:value={newUser.username}
+        required
+        disabled={isSubmitting}
+      />
+      <input
+        type="email"
+        placeholder="Gmail"
+        bind:value={newUser.email}
+        disabled={isSubmitting}
+      />
+      <input
+        type="text"
+        placeholder="Nombre completo"
+        bind:value={newUser.fullName}
+        required
+        disabled={isSubmitting}
+      />
+      <input
+        type="password"
+        placeholder="Contraseña"
+        bind:value={newUser.password}
+        required
+        disabled={isSubmitting}
+      />
       <select bind:value={newUser.role} required disabled={isSubmitting}>
         <option value="Supervisor">Supervisor</option>
         <option value="Mecanico">Mecánico</option>
         <option value="Administrador">Administrador</option>
       </select>
       <button type="submit" class="btn-create" disabled={isSubmitting}>
-        {isSubmitting ? 'Creando...' : 'Crear'}
+        {isSubmitting ? "Creando..." : "Crear"}
       </button>
     </form>
-    {#if errorMessage}
-      <p class="error-message">{errorMessage}</p>
-    {/if}
   </div>
 
+  <!-- Tabla de Usuarios (actualizada) -->
   <div class="table-wrapper">
     {#if $data.isLoading}
       <p>Cargando usuarios...</p>
-    {:else if $data.error}
+    {:else if $data.error && !showEditModal && !showDeleteModal}
       <p class="error-message">{$data.error}</p>
-    {:else}
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Usuario</th>
-            <th>Gmail</th>
-            <th>Nombre Completo</th>
-            <th>Rol</th>
-            <th>Estado</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each $data.users as user (user.id)}
-            <tr>
-              <td>{user.id}</td>
-              <td>{user.username}</td>
-              <td>{user.email}</td>
-              <td>{user.fullName}</td>
-              <td>{user.role}</td>
-              <td>
-                <span class="status-badge" class:active={user.status}>
-                  {user.status ? 'Activo' : 'Inactivo'}
-                </span>
-              </td>
-              <td>
-                <button class="btn-toggle" on:click={() => handleToggleStatus(user)}>
-                  {user.status ? 'Desactivar' : 'Activar'}
-                </button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
     {/if}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Usuario</th>
+          <th>Gmail</th>
+          <th>Nombre Completo</th>
+          <th>Rol</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each $data.users as user (user.id)}
+          <tr>
+            <td>{user.id}</td>
+            <td>{user.username}</td>
+            <td>{user.email}</td>
+            <td>{user.fullName}</td>
+            <td>{user.role}</td>
+            <td class="actions">
+              <button
+                class="btn-action btn-edit"
+                on:click={() => openEditModal(user)}>Editar</button
+              >
+              <button
+                class="btn-action btn-delete"
+                on:click={() => openDeleteModal(user)}>Eliminar</button
+              >
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
   </div>
 </div>
+
+<!-- Modal de Edición -->
+{#if showEditModal}
+  <div class="modal-overlay" on:click={closeEditModal}>
+    <div class="modal-content" on:click|stopPropagation>
+      <div class="modal-header">
+        <h3>Editar Usuario</h3>
+        <button class="close-btn" on:click={closeEditModal}>×</button>
+      </div>
+      <form class="modal-form" on:submit={handleUpdateUser}>
+        <label
+          >Usuario: <input
+            type="text"
+            bind:value={userToEdit.username}
+            required
+          /></label
+        >
+        <label
+          >Gmail: <input type="email" bind:value={userToEdit.email} /></label
+        >
+        <label
+          >Nueva Contraseña: <input
+            type="password"
+            bind:value={newPassword}
+            placeholder="Dejar en blanco para no cambiar"
+          /></label
+        >
+
+        {#if errorMessage}
+          <p class="error-message">{errorMessage}</p>
+        {/if}
+
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" on:click={closeEditModal}
+            >Cancelar</button
+          >
+          <button type="submit" class="btn-save" disabled={isSubmitting}>
+            {isSubmitting ? "Guardando..." : "Guardar Cambios"}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal de Confirmación de Eliminación -->
+{#if showDeleteModal}
+  <div class="modal-overlay" on:click={closeDeleteModal}>
+    <div class="modal-content confirmation" on:click|stopPropagation>
+      <h3>Confirmar Eliminación</h3>
+      <p>
+        ¿Está seguro que desea eliminar al usuario "{userToDelete.fullName}"?
+      </p>
+      {#if errorMessage}
+        <p class="error-message">{errorMessage}</p>
+      {/if}
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" on:click={closeDeleteModal}
+          >Cancelar</button
+        >
+        <button
+          type="button"
+          class="btn-delete"
+          on:click={handleDeleteUser}
+          disabled={!isDeleteConfirmEnabled}
+        >
+          {isDeleteConfirmEnabled ? "Sí, Eliminar" : "Espere 3 segundos"}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .management-container {
     display: flex;
     flex-direction: column;
     gap: 24px;
-    font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
+    font-family: "MS Sans Serif", "Tahoma", sans-serif;
     font-size: 11px;
   }
   .form-container {
@@ -127,25 +304,19 @@
     align-items: center;
     flex-wrap: wrap;
   }
-  .create-form input, .create-form select {
+  .create-form input,
+  .create-form select {
     padding: 4px 6px;
     border: 1px inset #c0c0c0;
     font-size: 11px;
     font-family: inherit;
   }
-  .btn-create, .btn-toggle {
+  .btn-create {
     padding: 4px 12px;
     background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 100%);
     border: 1px outset #c0c0c0;
     cursor: pointer;
     font-size: 11px;
-  }
-  .btn-create:hover, .btn-toggle:hover {
-    background: linear-gradient(to bottom, #f0f0f0 0%, #d0d0d0 100%);
-  }
-  .btn-create:disabled {
-    background: #c0c0c0;
-    cursor: not-allowed;
   }
   .table-wrapper {
     flex: 1;
@@ -157,25 +328,105 @@
     width: 100%;
     border-collapse: collapse;
   }
-  .data-table th, .data-table td {
+  .data-table th,
+  .data-table td {
     border: 1px solid #808080;
     padding: 8px;
     text-align: left;
-    background-color: #ffffff;
   }
   .data-table th {
     background: #c0c0c0;
   }
-  .status-badge {
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: white;
-    background-color: #808080; /* Inactivo */
+  .actions {
+    display: flex;
+    gap: 8px;
   }
-  .status-badge.active {
-    background-color: #008000; /* Activo */
+  .btn-action {
+    padding: 2px 8px;
+    border: 1px outset #c0c0c0;
+    cursor: pointer;
+  }
+  .btn-edit {
+    background-color: #f0f0f0;
+  }
+  .btn-delete {
+    background-color: #ffbaba;
   }
   .error-message {
     color: red;
+    margin-top: 10px;
+  }
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  .modal-content {
+    background: #e0e0e0;
+    padding: 20px;
+    border: 2px outset #c0c0c0;
+    min-width: 400px;
+  }
+  .modal-content.confirmation {
+    font-size: medium;
+    text-align: center;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+  }
+  .modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .modal-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .modal-form input {
+    padding: 4px 6px;
+    border: 1px inset #c0c0c0;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .btn-cancel,
+  .btn-save {
+    padding: 4px 12px;
+    border: 1px outset #c0c0c0;
+    cursor: pointer;
+  }
+  .btn-save {
+    font-weight: bold;
+  }
+  .btn-delete[disabled] {
+    background: #d3d3d3;
+    cursor: not-allowed;
+  }
+  .loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100px; /* O una altura adecuada */
   }
 </style>

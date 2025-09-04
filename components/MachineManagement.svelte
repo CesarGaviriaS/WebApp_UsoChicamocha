@@ -1,10 +1,9 @@
 <script>
   import { data } from '../stores/data.js';
 
-  // --- LOCAL STATE (Svelte 4 syntax) ---
-  // Se leen los datos directamente del store en el HTML usando '$data'
+
   let isSubmitting = false;
-  let errorMessage = ''; // New error message variable
+  let errorMessage = ''; 
   const initialMachineState = {
     name: '', model: '', numEngine: '', numInterIdentification: '',
     brand: '', soat: '', runt: ''
@@ -18,13 +17,13 @@
   async function handleCreateMachine(event) {
     event.preventDefault();
     isSubmitting = true;
-    errorMessage = ''; // Clear previous errors
+    errorMessage = ''; 
     try {
       await data.createMachine(newMachine);
       newMachine = { ...initialMachineState };
     } catch (e) {
       console.error("Fallo al crear máquina:", e);
-      errorMessage = e.message || 'Error al crear máquina.'; // Set error message
+      errorMessage = e.message || 'Error al crear máquina.'; 
     } finally {
       isSubmitting = false;
     }
@@ -318,5 +317,11 @@
     border: 1px outset #c0c0c0;
     cursor: pointer;
   }
-  .btn-save { font-weight: bold; }
+.btn-save { font-weight: bold; }
+  .loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100px; /* O una altura adecuada */
+  }
 </style>

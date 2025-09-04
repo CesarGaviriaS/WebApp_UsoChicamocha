@@ -1,32 +1,136 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import Sidebar from './components/Sidebar.svelte';
   import DataGrid from './components/DataGrid.svelte';
   import WorkOrderModal from './components/WorkOrderModal.svelte';
   import Login from './components/Login.svelte';
   import UserManagement from './components/UserManagement.svelte';
   import MachineManagement from './components/MachineManagement.svelte';
-  
+  import NotificationDropdown from './components/NotificationDropdown.svelte';
+  import Loader from './components/Loader.svelte'; // Importar el Loader
+
   import { auth } from './stores/auth.js';
-  import { ui } from './stores/ui.js';
+  import { ui, notificationCount, addNotification, notificationMessages, removeNotification } from './stores/ui.js';
   import { data } from './stores/data.js';
 
-  onMount(() => {
-    if (auth.checkAuth()) {
+  const STREAM_URL = 'https://pdxs8r4k-8080.use2.devtunnels.ms/inspections/stream';
+  let eventSource;
+  let showNotifications = false;
+  let audioContext;
+
+  // --- Funciones de Sonido ---
+  function initAudio() {
+    if (audioContext) return;
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+    } catch (e) {
+      console.warn('Web Audio API is not supported in this browser.');
+    }
+  }
+
+  function playBeep(startTime) {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.type = 'sawtooth';
+    gainNode.gain.setValueAtTime(0.25, startTime);
+    oscillator.frequency.setValueAtTime(880, startTime);
+    oscillator.frequency.linearRampToValueAtTime(1500, startTime + 0.15);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + 0.2);
+  }
+
+  function playNotificationSound() {
+    if (!audioContext) return;
+    const now = audioContext.currentTime;
+    playBeep(now);
+    playBeep(now + 0.3);
+    playBeep(now + 0.6);
+  }
+
+  // --- Ciclo de Vida ---
+  onMount(async () => {
+    window.addEventListener('click', initAudio, { once: true });
+
+    if (await auth.checkAuth()) {
       data.fetchDashboardData();
+      
+      eventSource = new EventSource(STREAM_URL);
+
+      eventSource.onopen = () => {
+        console.log('Conexión al stream de inspecciones establecida.');
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const newInspection = JSON.parse(event.data);
+          console.log('¡Nueva inspección inesperada recibida!', newInspection);
+          
+          if ($ui.currentView === 'dashboard') {
+            data.fetchDashboardData();
+          }
+
+          const machine = newInspection.machine;
+          const notification = {
+            id: newInspection.UUID || `fallback-${Date.now()}`,
+            text: `Imprevisto: ${machine?.name || ''} - ${machine?.model || ''} - ${machine?.numInterIdentification || ''}`
+          };
+          addNotification(notification);
+          playNotificationSound();
+
+        } catch (error) {
+          console.error('Error al parsear el dato recibido:', error, 'Dato crudo:', event.data);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('Error en la conexión con el servidor (EventSource):', error);
+      };
     }
   });
+
+  onDestroy(() => {
+    if (eventSource) {
+      console.log('Cerrando conexión al stream.');
+      eventSource.close();
+    }
+    window.removeEventListener('click', initAudio);
+  });
+
+  // --- Handlers de UI ---
+  function toggleNotifications() {
+    showNotifications = !showNotifications;
+  }
+
+  function handleDeleteNotification(event) {
+    const notificationId = event.detail;
+    removeNotification(notificationId);
+  }
 
   function handleNavigation(event) {
     const newView = event.detail;
     ui.setCurrentView(newView);
+    showNotifications = false;
 
-    if (newView === 'dashboard') {
-      data.fetchDashboardData();
-    } else if (newView === 'users') {
-      data.fetchUsers(); 
-    } else if (newView === 'machines') {
-      data.fetchMachines();
+    // Fetch data based on the new view
+    switch (newView) {
+      case 'dashboard':
+        data.fetchDashboardData();
+        break;
+      case 'users':
+        data.fetchUsers();
+        break;
+      case 'machines':
+        data.fetchMachines();
+        break;
+      case 'inspections': // Assuming 'inspections' is a view, though it's currently part of dashboardData
+        data.fetchInspections();
+        break;
+      // Add other cases as needed for new sections
     }
   }
 
@@ -36,13 +140,15 @@
   }
 
   async function handleCreateWorkOrder(workOrderData) {
+    ui.setSaving(true);
     try {
       await data.createWorkOrder(workOrderData);
       console.log('Orden de trabajo creada con éxito:', workOrderData);
       ui.closeWorkOrderModal();
     } catch (error) {
       console.error('Error al crear orden de trabajo:', error);
-      // Optionally, display an error message to the user
+    } finally {
+      ui.setSaving(false);
     }
   }
 
@@ -50,6 +156,18 @@
     ui.closeWorkOrderModal();
   }
 </script>
+
+<svelte:head>
+  <title>{$notificationCount > 0 ? `(${$notificationCount})` : ''} Dashboard Maquinaria</title>
+</svelte:head>
+
+<svelte:window on:click={() => (showNotifications = false)} />
+
+{#if $ui.isSaving}
+  <div class="overlay">
+    <Loader />
+  </div>
+{/if}
 
 {#if !$auth.isAuthenticated}
   <Login />
@@ -76,6 +194,17 @@
           </h2>
         </div>
         <div class="header-right">
+          <div class="notification-wrapper" on:click|stopPropagation>
+            <button class="notification-bell" on:click={toggleNotifications} title="Notificaciones">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12,22A2,2 0 0,0 14,20H10A2,2 0 0,0 12,22M18,16V11C18,7.93 16.36,5.36 13.5,4.68V4A1.5,1.5 0 0,0 12,2.5A1.5,1.5 0 0,0 10.5,4V4.68C7.63,5.36 6,7.93 6,11V16L4,18V19H20V18L18,16Z"></path></svg>
+              {#if $notificationCount > 0}
+                <span class="notification-badge">{$notificationCount}</span>
+              {/if}
+            </button>
+            {#if showNotifications}
+              <NotificationDropdown messages={$notificationMessages} on:delete={handleDeleteNotification} />
+            {/if}
+          </div>
           <span class="user-info">Usuario: {$auth.currentUser?.name}</span>
           <button class="logout-btn" on:click={auth.logout}>Cerrar Sesión</button>
         </div>
@@ -83,13 +212,12 @@
 
       <div class="content">
         {#if $data.isLoading}
-          <p>Cargando datos...</p>
+          <div class="loader-container"><Loader /></div>
         {:else if $data.error}
           <p style="color: red;">Error: {$data.error}</p>
         {:else}
           {#if $ui.currentView === 'dashboard'}
             <div class="grid-container">
-              <!-- <<< CORREGIDO: Se eliminó la prop 'tableType' >>> -->
               <DataGrid 
                 data={$data.dashboardData} 
                 on:cellContextMenu={handleCellContextMenu}
@@ -123,7 +251,57 @@
   </div>
 {/if}
 <style>
-  /* Tus estilos no necesitan cambios */
+  .overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+  }
+  .loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+  }
+  .notification-wrapper {
+    position: relative;
+  }
+  .notification-bell {
+    position: relative;
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-right: 16px;
+    padding: 0;
+  }
+  .notification-bell svg {
+    width: 24px;
+    height: 24px;
+    fill: #000000;
+  }
+  .notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: red;
+    color: white;
+    border-radius: 50%;
+    min-width: 16px;
+    height: 16px;
+    padding: 1px;
+    font-size: 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid white;
+  }
   .logout-btn {
     padding: 4px 8px;
     margin-left: 12px;
