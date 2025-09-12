@@ -188,6 +188,134 @@
   function handleCancelWorkOrder() {
     ui.closeWorkOrderModal();
   }
+
+  const dashboardColumns = [
+    {
+      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }),
+      id: "fecha",
+      header: "Fecha",
+      size: 80,
+      sortingFn: (rowA, rowB, columnId) => {
+          const dateA = new Date(rowA.original.dateStamp + 'Z');
+          const dateB = new Date(rowB.original.dateStamp + 'Z');
+          return dateA.getTime() - dateB.getTime();
+      },
+    },
+    {
+      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleTimeString('en-GB', { timeZone: 'America/Bogota' }), // Formato 24h
+      id: "hora",
+      header: "Hora",
+      size: 50,
+    },
+    {
+      accessorFn: (row) => `${row.machine.name} ${row.machine.model} ${row.machine.numInterIdentification}`,
+      id: "maquina",
+      header: "MÁQUINA",
+      size: 250,
+    },
+    { accessorKey: "hourMeter", header: "Horómetro", size: 80 },
+    {
+      accessorKey: "leakStatus",
+      header: "Fugas Sistema",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "brakeStatus",
+      header: "Sistema Frenos",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "beltsPulleysStatus",
+      header: "Correas y Poleas",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "tireLanesStatus",
+      header: "Llantas/Carriles",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "carIgnitionStatus",
+      header: "Sistema Encendido",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "electricalStatus",
+      header: "Sistema Eléctrico",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "mechanicalStatus",
+      header: "Sistema Mecánico",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "temperatureStatus",
+      header: "Nivel Temperatura",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "oilStatus",
+      header: "Nivel Aceite",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "hydraulicStatus",
+      header: "Nivel Hidráulico",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "coolantStatus",
+      header: "Nivel Refrigerante",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "structuralStatus",
+      header: "Estado Estructural",
+      size: 100,
+      meta: { isStatus: true },
+    },
+    {
+      accessorKey: "expirationDateFireExtinguisher",
+      header: "Vigencia Extintor",
+      size: 110,
+      meta: { isDateStatus: true },
+    },
+    {
+      accessorKey: "observations",
+      header: "Observaciones",
+      size: 350,
+      meta: { isMultiline: true },
+    },
+    {
+      accessorKey: "greasingAction",
+      header: "Acción de Engrase",
+      size: 150,
+    },
+    {
+      accessorKey: "greasingObservations",
+      header: "Observaciones de Engrase",
+      size: 350,
+      meta: { isMultiline: true },
+    },
+    {
+      accessorFn: (row) => row.user.fullName,
+      id: "responsable",
+      header: "Responsable",
+      size: 160,
+    },
+  ];
 </script>
 
 <svelte:head>
@@ -265,6 +393,7 @@
           {#if $ui.currentView === 'dashboard'}
             <div class="grid-container">
               <DataGrid 
+                columns={dashboardColumns}
                 data={$data.dashboardData} 
                 on:cellContextMenu={handleCellContextMenu}
               />

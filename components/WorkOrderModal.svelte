@@ -116,12 +116,11 @@
 
     const description = [
       inspectionType,
-      `Maquina: ${workOrderForm.maquinaInvolucrada}`,
-      `Sector: ${workOrderForm.componenteInvolucrado}`,
-      `Condición: ${currentStatus}`,
-      `Descripcion: ${workOrderForm.detalles}`,
-      `Se le asigna tarea a: ${workOrderForm.asignadoA}`
-    ].join('@');
+      workOrderForm.componenteInvolucrado,
+      currentStatus,
+      workOrderForm.detalles,
+      workOrderForm.asignadoA
+    ].join('|');
 
     dispatch('createWorkOrder', {
       inspectionId: rowData.id,

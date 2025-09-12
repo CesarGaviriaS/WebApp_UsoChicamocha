@@ -11,7 +11,7 @@
 
   // --- PROPS ---
   export let data = [];
-  export let tableType = "estados";
+  export let columns = [];
   export let onCellContextMenu = null;
 
   const dispatch = createEventDispatcher();
@@ -23,9 +23,9 @@
   const PAGE_SIZE = 20;
   const STATUS_VALUES = ["Óptimo", "Regular", "Malo"];
   const STATUS_CLASSES = {
-    Óptimo: "status-optimo",
-    Regular: "status-regular",
-    Malo: "status-malo",
+    "Óptimo": "status-optimo",
+    "Regular": "status-regular",
+    "Malo": "status-malo",
   };
   
 
@@ -43,137 +43,6 @@
     if (expirationDate <= twoMonthsFromNow) return "Regular";
     return "Óptimo";
   }
-
-  // --- COLUMNAS ---
-  const estadosColumns = [
-    {
-      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }),
-      id: "fecha",
-      header: "Fecha",
-      size: 80,
-      sortingFn: (rowA, rowB, columnId) => {
-          const dateA = new Date(rowA.original.dateStamp + 'Z');
-          const dateB = new Date(rowB.original.dateStamp + 'Z');
-          return dateA.getTime() - dateB.getTime();
-      },
-    },
-    {
-      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleTimeString('en-GB', { timeZone: 'America/Bogota' }), // Formato 24h
-      id: "hora",
-      header: "Hora",
-      size: 50,
-    },
-    {
-      accessorFn: (row) => `${row.machine.name} ${row.machine.model} ${row.machine.numInterIdentification}`,
-      id: "maquina",
-      header: "MÁQUINA",
-      size: 250,
-    },
-    { accessorKey: "hourMeter", header: "Horómetro", size: 80 },
-    {
-      accessorKey: "leakStatus",
-      header: "Fugas Sistema",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "brakeStatus",
-      header: "Sistema Frenos",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "beltsPulleysStatus",
-      header: "Correas y Poleas",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "tireLanesStatus",
-      header: "Llantas/Carriles",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "carIgnitionStatus",
-      header: "Sistema Encendido",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "electricalStatus",
-      header: "Sistema Eléctrico",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "mechanicalStatus",
-      header: "Sistema Mecánico",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "temperatureStatus",
-      header: "Nivel Temperatura",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "oilStatus",
-      header: "Nivel Aceite",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "hydraulicStatus",
-      header: "Nivel Hidráulico",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "coolantStatus",
-      header: "Nivel Refrigerante",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "structuralStatus",
-      header: "Estado Estructural",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "expirationDateFireExtinguisher",
-      header: "Vigencia Extintor",
-      size: 110,
-      meta: { isDateStatus: true },
-    },
-    {
-      accessorKey: "observations",
-      header: "Observaciones",
-      size: 350,
-      meta: { isMultiline: true },
-    },
-    {
-      accessorKey: "greasingAction",
-      header: "Acción de Engrase",
-      size: 150,
-    },
-    {
-      accessorKey: "greasingObservations",
-      header: "Observaciones de Engrase",
-      size: 350,
-      meta: { isMultiline: true },
-    },
-    {
-      accessorFn: (row) => row.user.fullName,
-      id: "responsable",
-      header: "Responsable",
-      size: 160,
-    },
-  ];
-
-  $: columns = tableType === "estados" ? estadosColumns : [];
 
   $: filteredData = (() => {
     if (!startDate && !endDate) {
@@ -215,7 +84,6 @@
       getPaginationRowModel: getPaginationRowModel(),
       initialState: {
         pagination: { pageSize: PAGE_SIZE },
-        sorting: [{ id: 'fecha', desc: true }, { id: 'hora', desc: true }],
       },
     });
   }
@@ -431,6 +299,25 @@
                         </div>
                       {/if}
                     </div>
+                  {:else if cell.column.columnDef.meta?.isOrigin}
+                    {@const value = cell.getValue()}
+                    <span
+                      class="cell-content"
+                      class:origen-imprevisto={value === 'Imprevisto'}
+                      class:origen-inspeccion={value === 'Inspección'}
+                    >
+                      {value ?? ""}
+                    </span>
+                  {:else if cell.column.columnDef.meta?.isCondition}
+                    {@const value = cell.getValue()}
+                    <span
+                      class="cell-content"
+                      class:condicion-optimo={value === 'Óptimo'}
+                      class:condicion-regular={value === 'Regular'}
+                      class:condicion-malo={value === 'Malo'}
+                    >
+                      {value ?? ""}
+                    </span>
                   {:else}
                     <span class="cell-content">
                       {cell.getValue() ?? ""}
@@ -524,7 +411,7 @@
     overflow-y: hidden;
   }
   .data-table {
-    width: 100%;
+    min-width: 100%;
     border-collapse: collapse;
   }
   .header-cell {
@@ -586,6 +473,26 @@
   }
   .status-malo {
     background: #ff6b6b;
+  }
+  .origen-imprevisto {
+    color: #ff6b6b; /* red */
+    font-weight: bold;
+  }
+  .origen-inspeccion {
+    color: darkblue;
+    font-weight: bold;
+  }
+  .condicion-optimo {
+    color: #2E8B57; /* SeaGreen */
+    font-weight: bold;
+  }
+  .condicion-regular {
+    color: #ffd700; /* yellow */
+    font-weight: bold;
+  }
+  .condicion-malo {
+    color: #ff6b6b; /* red */
+    font-weight: bold;
   }
   .pagination {
     padding: 8px 12px;
