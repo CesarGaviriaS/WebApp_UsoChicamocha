@@ -25,6 +25,14 @@
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M12,2L9.5,4.5L6.4,4L5.5,1L2,3.5L3,6.5L1,7.5L2.5,11L4.5,9.5L5,12.5L1.5,15L4,17.5L6.5,16.5L7.5,19L11,20.5L9.5,22.5L12.5,23L15,20.5L17.6,21L18.5,24L22,21.5L21,18.5L23,17.5L21.5,14L19.5,15.5L19,12.5L22.5,10L20,7.5L17.5,8.5L16.5,6L13,4.5L14.5,2.5L11.5,2H12Z" /></svg>
     <span class="nav-text">Máquinas</span>
   </button>
+  <button class="nav-item" on:click={() => navigate('work-orders')} class:active={activeView === 'work-orders'} title="Órdenes de Trabajo">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8M12,10A2,2 0 0,0 10,12A2,2 0 0,0 12,14A2,2 0 0,0 14,12A2,2 0 0,0 12,10M12,2L9.5,4.5L6.4,4L5.5,1L2,3.5L3,6.5L1,7.5L2.5,11L4.5,9.5L5,12.5L1.5,15L4,17.5L6.5,16.5L7.5,19L11,20.5L9.5,22.5L12.5,23L15,20.5L17.6,21L18.5,24L22,21.5L21,18.5L23,17.5L21.5,14L19.5,15.5L19,12.5L22.5,10L20,7.5L17.5,8.5L16.5,6L13,4.5L14.5,2.5L11.5,2H12Z" /></svg>
+    <span class="nav-text">Órdenes</span>
+  </button>
+  <button class="nav-item" on:click={() => navigate('consolidado')} class:active={activeView === 'consolidado'} title="Consolidado">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19,3H5C3.9,3 3,3.9 3,5V19C3,20.1 3.9,21 5,21H19C20.1,21 21,20.1 21,19V5C21,3.9 20.1,3 19,3M19,19H5V5H19V19M11,7H9V9H11V7M15,7H13V9H15V7M11,11H9V13H11V11M15,11H13V13H15V11Z" /></svg>
+    <span class="nav-text">Consolidado</span>
+  </button>
 </nav>
 
 <style>

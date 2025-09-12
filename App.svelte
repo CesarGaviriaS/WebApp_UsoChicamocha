@@ -6,6 +6,8 @@
   import Login from './components/Login.svelte';
   import UserManagement from './components/UserManagement.svelte';
   import MachineManagement from './components/MachineManagement.svelte';
+  import WorkOrderManagement from './components/WorkOrderManagement.svelte';
+  import Consolidado from './components/Consolidado.svelte';
   import NotificationDropdown from './components/NotificationDropdown.svelte';
   import Loader from './components/Loader.svelte'; // Importar el Loader
 
@@ -52,44 +54,65 @@
     playBeep(now + 0.6);
   }
 
+  // --- Conexión al Stream ---
+  let reconnectionTimer;
+
+  function initializeEventSource() {
+    if (eventSource && (eventSource.readyState === EventSource.OPEN || eventSource.readyState === EventSource.CONNECTING)) {
+      console.log('La conexión ya está abierta o conectando.');
+      return;
+    }
+
+    eventSource = new EventSource(STREAM_URL);
+
+    eventSource.onopen = () => {
+      console.log('Conexión al stream de inspecciones establecida.');
+      if (reconnectionTimer) {
+        clearTimeout(reconnectionTimer);
+        reconnectionTimer = null;
+      }
+    };
+
+    eventSource.onmessage = (event) => {
+      try {
+        const newInspection = JSON.parse(event.data);
+        console.log('¡Nueva inspección inesperada recibida!', newInspection);
+        
+        if ($ui.currentView === 'dashboard') {
+          data.fetchDashboardData();
+        }
+
+        const machine = newInspection.machine;
+        const notification = {
+          id: newInspection.UUID || `fallback-${Date.now()}`,
+          text: `Imprevisto: ${machine?.name || ''} - ${machine?.model || ''} - ${machine?.numInterIdentification || ''}`
+        };
+        addNotification(notification);
+        playNotificationSound();
+
+      } catch (error) {
+        console.error('Error al parsear el dato recibido:', error, 'Dato crudo:', event.data);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('Error en la conexión con el servidor (EventSource):', error);
+      eventSource.close();
+      
+      if (!reconnectionTimer) {
+        console.log('Intentando reconectar en 5 segundos...');
+        reconnectionTimer = setTimeout(initializeEventSource, 5000);
+      }
+    };
+  }
+
   // --- Ciclo de Vida ---
   onMount(async () => {
     window.addEventListener('click', initAudio, { once: true });
 
     if (await auth.checkAuth()) {
       data.fetchDashboardData();
-      
-      eventSource = new EventSource(STREAM_URL);
-
-      eventSource.onopen = () => {
-        console.log('Conexión al stream de inspecciones establecida.');
-      };
-
-      eventSource.onmessage = (event) => {
-        try {
-          const newInspection = JSON.parse(event.data);
-          console.log('¡Nueva inspección inesperada recibida!', newInspection);
-          
-          if ($ui.currentView === 'dashboard') {
-            data.fetchDashboardData();
-          }
-
-          const machine = newInspection.machine;
-          const notification = {
-            id: newInspection.UUID || `fallback-${Date.now()}`,
-            text: `Imprevisto: ${machine?.name || ''} - ${machine?.model || ''} - ${machine?.numInterIdentification || ''}`
-          };
-          addNotification(notification);
-          playNotificationSound();
-
-        } catch (error) {
-          console.error('Error al parsear el dato recibido:', error, 'Dato crudo:', event.data);
-        }
-      };
-
-      eventSource.onerror = (error) => {
-        console.error('Error en la conexión con el servidor (EventSource):', error);
-      };
+      initializeEventSource();
     }
   });
 
@@ -97,6 +120,9 @@
     if (eventSource) {
       console.log('Cerrando conexión al stream.');
       eventSource.close();
+    }
+    if (reconnectionTimer) {
+      clearTimeout(reconnectionTimer);
     }
     window.removeEventListener('click', initAudio);
   });
@@ -127,10 +153,16 @@
       case 'machines':
         data.fetchMachines();
         break;
-      case 'inspections': // Assuming 'inspections' is a view, though it's currently part of dashboardData
+      case 'work-orders':
+        data.fetchWorkOrders();
+        break;
+      case 'consolidado':
+        // No initial data fetch here, component handles it
+        break;
+      case 'inspections': 
         data.fetchInspections();
         break;
-      // Add other cases as needed for new sections
+     
     }
   }
 
@@ -139,7 +171,8 @@
     ui.openWorkOrderModal(data, column);
   }
 
-  async function handleCreateWorkOrder(workOrderData) {
+  async function handleCreateWorkOrder(event) {
+    const workOrderData = event.detail;
     ui.setSaving(true);
     try {
       await data.createWorkOrder(workOrderData);
@@ -169,6 +202,15 @@
   </div>
 {/if}
 
+{#if $auth.isRefreshing}
+  <div class="overlay">
+    <div class="refresh-indicator">
+      <Loader />
+      <p>Renovando sesión...</p>
+    </div>
+  </div>
+{/if}
+
 {#if !$auth.isAuthenticated}
   <Login />
 {:else}
@@ -190,6 +232,10 @@
               Gestión de Usuarios
             {:else if $ui.currentView === 'machines'}
               Gestión de Máquinas
+            {:else if $ui.currentView === 'work-orders'}
+              Gestión de Órdenes de Trabajo
+            {:else if $ui.currentView === 'consolidado'}
+              Consolidado de Maquinaria
             {/if}
           </h2>
         </div>
@@ -234,6 +280,10 @@
             <UserManagement />
           {:else if $ui.currentView === 'machines'}
             <MachineManagement />
+          {:else if $ui.currentView === 'work-orders'}
+            <WorkOrderManagement />
+          {:else if $ui.currentView === 'consolidado'}
+            <Consolidado />
           {/if}
         {/if}
       </div>
@@ -262,6 +312,13 @@
     justify-content: center;
     align-items: center;
     z-index: 9999;
+  }
+  .refresh-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: white;
+    font-size: 14px;
   }
   .loader-container {
     display: flex;

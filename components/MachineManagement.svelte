@@ -5,8 +5,14 @@
   let isSubmitting = false;
   let errorMessage = ''; 
   const initialMachineState = {
-    name: '', model: '', numEngine: '', numInterIdentification: '',
-    brand: '', soat: '', runt: ''
+    name: '', 
+    model: '', 
+    numEngine: '', 
+    numInterIdentification: '',
+    brand: '', 
+    soat: '', 
+    runt: '',
+    belongsTo: 'distrito' // Valor por defecto
   };
   let newMachine = { ...initialMachineState };
   let editingMachine = null;
@@ -19,7 +25,18 @@
     isSubmitting = true;
     errorMessage = ''; 
     try {
-      await data.createMachine(newMachine);
+      // Aseguramos que el payload tiene la estructura correcta
+      const payload = {
+        name: newMachine.name,
+        belongsTo: newMachine.belongsTo,
+        model: newMachine.model,
+        soat: newMachine.soat || null, // Enviar null si está vacío
+        brand: newMachine.brand,
+        runt: newMachine.runt || null, // Enviar null si está vacío
+        numEngine: newMachine.numEngine,
+        numInterIdentification: newMachine.numInterIdentification
+      };
+      await data.createMachine(payload);
       newMachine = { ...initialMachineState };
     } catch (e) {
       console.error("Fallo al crear máquina:", e);
@@ -35,7 +52,19 @@
     isSubmitting = true;
     errorMessage = ''; // Clear previous errors
     try {
-      await data.updateMachine(editingMachine);
+      // Aseguramos que el payload tiene la estructura correcta
+      const payload = {
+        id: editingMachine.id,
+        name: editingMachine.name,
+        belongsTo: editingMachine.belongsTo,
+        model: editingMachine.model,
+        soat: editingMachine.soat || null,
+        brand: editingMachine.brand,
+        runt: editingMachine.runt || null,
+        numEngine: editingMachine.numEngine,
+        numInterIdentification: editingMachine.numInterIdentification
+      };
+      await data.updateMachine(payload);
       closeEditModal();
     } catch (e) {
       console.error("Fallo al actualizar máquina:", e);
@@ -59,7 +88,8 @@
 
   // --- MODAL FUNCTIONS ---
   function openEditModal(machine) {
-    editingMachine = { ...machine };
+    // Asegurarse de que belongsTo tenga un valor al abrir el modal
+    editingMachine = { ...machine, belongsTo: machine.belongsTo || 'distrito' };
     showEditModal = true;
   }
   function closeEditModal() {
@@ -78,6 +108,15 @@
       <input type="text" placeholder="Modelo" bind:value={newMachine.model} required disabled={isSubmitting} />
       <input type="text" placeholder="Núm. Motor" bind:value={newMachine.numEngine} disabled={isSubmitting} />
       <input type="text" placeholder="Núm. Identificación" bind:value={newMachine.numInterIdentification} disabled={isSubmitting} />
+      
+      <div class="form-group">
+        <label for="belongsTo">Pertenece a:</label>
+        <select id="belongsTo" bind:value={newMachine.belongsTo} disabled={isSubmitting}>
+          <option value="distrito">Distrito</option>
+          <option value="asociacion">Asociación</option>
+        </select>
+      </div>
+
       <div class="form-group">
         <label for="newSoat">SOAT:</label>
         <input type="date" id="newSoat" bind:value={newMachine.soat} disabled={isSubmitting} />
@@ -108,6 +147,7 @@
             <th>Nombre</th>
             <th>Marca</th>
             <th>Modelo</th>
+            <th>Pertenece a</th>
             <th>Núm. Motor</th>
             <th>ID Interno</th>
             <th>SOAT</th>
@@ -122,6 +162,7 @@
               <td>{machine.name}</td>
               <td>{machine.brand}</td>
               <td>{machine.model}</td>
+              <td>{machine.belongsTo}</td>
               <td>{machine.numEngine}</td>
               <td>{machine.numInterIdentification}</td>
               <td>{machine.soat}</td>
@@ -150,6 +191,12 @@
         <label>Nombre: <input type="text" bind:value={editingMachine.name} required /></label>
         <label>Marca: <input type="text" bind:value={editingMachine.brand} /></label>
         <label>Modelo: <input type="text" bind:value={editingMachine.model} required /></label>
+        <label>Pertenece a: 
+          <select bind:value={editingMachine.belongsTo}>
+            <option value="distrito">Distrito</option>
+            <option value="asociacion">Asociación</option>
+          </select>
+        </label>
         <label>Núm. Motor: <input type="text" bind:value={editingMachine.numEngine} /></label>
         <label>Núm. Identificación: <input type="text" bind:value={editingMachine.numInterIdentification} /></label>
         <label>SOAT: <input type="date" bind:value={editingMachine.soat} /></label>

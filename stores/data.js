@@ -25,9 +25,11 @@ function createDataStore() {
       }
 
       update(store => ({ ...store, [key]: dataToStore, isLoading: false }));
+      return dataToStore;
     } catch (err) {
       console.error(`Error fetching ${endpoint}:`, err);
       update(store => ({ ...store, error: err.message, isLoading: false }));
+      throw err;
     }
   }
 
@@ -109,10 +111,11 @@ function createDataStore() {
       }));
     },
 
-    fetchWorkOrders: () => fetchGeneric('workOrders', 'work-order'),
+    fetchWorkOrders: () => fetchGeneric('workOrders', 'order/all'),
     createWorkOrder: async (newWorkOrder) => {
-      const createdUser = await fetchWithAuth('work-order', { method: 'POST', body: JSON.stringify(newWorkOrder) });
-      update(store => ({ ...store, workOrders: [...store.workOrders, createdUser] }));
+      console.log('Enviando payload para crear orden:', JSON.stringify(newWorkOrder, null, 2));
+      const createdWorkOrder = await fetchWithAuth('order', { method: 'POST', body: JSON.stringify(newWorkOrder) });
+      update(store => ({ ...store, workOrders: [...store.workOrders, createdWorkOrder] }));
     },
   };
 }

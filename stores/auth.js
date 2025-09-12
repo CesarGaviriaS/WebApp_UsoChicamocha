@@ -26,9 +26,10 @@ function clearSession() {
 }
 
 function createAuthStore() {
-  const { subscribe, set } = writable({
+  const { subscribe, set, update } = writable({
     isAuthenticated: false,
     currentUser: null,
+    isRefreshing: false,
   });
 
   // --- Refresh Token Logic ---
@@ -36,39 +37,39 @@ function createAuthStore() {
     console.log("Intentando renovar el token de acceso...");
     const storedRefreshToken = localStorage.getItem('refreshToken');
     if (!storedRefreshToken) {
+      update(store => ({ ...store, isRefreshing: false }));
       return false;
     }
 
     try {
-      const response = await fetch(`${BASE_URL}/api/v1/auth/refresh`, {
+      const response = await fetch(`${BASE_URL}/api/v1/auth/token/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: storedRefreshToken }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to refresh token');
+        const errorBody = await response.text();
+        throw new Error(`Failed to refresh token, status: ${response.status}, body: ${errorBody}`);
       }
 
       const data = await response.json();
-      if (!data.status || !data.jwt) {
-        throw new Error('Invalid refresh response');
+      if (!data.accessToken) {
+        throw new Error('Invalid refresh response: "accessToken" field missing.');
       }
 
-      const newAccessToken = data.jwt;
+      const newAccessToken = data.accessToken;
       const newDecodedPayload = jwtDecode(newAccessToken);
       
-      // Set the new session with the new access token, keeping the same refresh token
       const currentUser = setSession(newAccessToken, storedRefreshToken, newDecodedPayload);
-      set({ isAuthenticated: true, currentUser });
+      set({ isAuthenticated: true, currentUser, isRefreshing: false });
       
       return true;
 
     } catch (error) {
       console.error("Refresh token failed:", error);
-      // If refresh fails, clear everything to force re-login
       clearSession();
-      set({ isAuthenticated: false, currentUser: null });
+      set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
       return false;
     }
   }
@@ -98,7 +99,7 @@ function createAuthStore() {
         const decodedPayload = jwtDecode(accessToken);
 
         const currentUser = setSession(accessToken, newRefreshToken, decodedPayload);
-        set({ isAuthenticated: true, currentUser });
+        set({ isAuthenticated: true, currentUser, isRefreshing: false });
 
         return { success: true, error: null };
 
@@ -108,12 +109,12 @@ function createAuthStore() {
     },
     logout: () => {
       clearSession();
-      set({ isAuthenticated: false, currentUser: null });
+      set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
     },
     checkAuth: async () => {
       const token = localStorage.getItem('accessToken');
       if (!token) {
-        set({ isAuthenticated: false, currentUser: null });
+        set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
         return false;
       }
 
@@ -122,21 +123,18 @@ function createAuthStore() {
         const isExpired = decodedPayload.exp * 1000 < Date.now();
 
         if (isExpired) {
+          update(store => ({ ...store, isRefreshing: true }));
           console.log("Token de acceso expirado, intentando renovar...");
-          // Token is expired, try to refresh it
-          const refreshed = await refreshToken();
-          return refreshed; // Returns true on success, false on failure
+          return await refreshToken();
         }
         
-        // Token is valid, set the application state
         const userRole = localStorage.getItem('userRole');
-        set({ isAuthenticated: true, currentUser: { name: decodedPayload.sub, role: userRole } });
+        set({ isAuthenticated: true, currentUser: { name: decodedPayload.sub, role: userRole }, isRefreshing: false });
         return true;
 
       } catch (error) {
-        // If the token is invalid for any reason
         clearSession();
-        set({ isAuthenticated: false, currentUser: null });
+        set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
         return false;
       }
     },

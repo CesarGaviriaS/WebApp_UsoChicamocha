@@ -39,18 +39,18 @@
       currentStatus = getExtintorStatus(rowData.vigenciaExtintor);
     } else {
       const fieldMappings = {
-        'Fugas Sistema': 'estadoFugas',
-        'Sistema Frenos': 'estadoFrenos',
-        'Correas y Poleas': 'estadoCorreasPoleas',
-        'Llantas/Carriles': 'estadoLlantasCarriles',
-        'Sistema Encendido': 'estadoEncendido',
-        'Sistema Eléctrico': 'estadoElectrico',
-        'Sistema Mecánico': 'estadoMecanico',
-        'Nivel Temperatura': 'estadoTemperatura',
-        'Nivel Aceite': 'estadoAceite',
-        'Nivel Hidráulico': 'estadoHidraulico',
-        'Nivel Refrigerante': 'estadoRefrigerante',
-        'Estado Estructural': 'estadoEstructural',
+        'Fugas Sistema': 'leakStatus',
+        'Sistema Frenos': 'brakeStatus',
+        'Correas y Poleas': 'beltsPulleysStatus',
+        'Llantas/Carriles': 'tireLanesStatus',
+        'Sistema Encendido': 'carIgnitionStatus',
+        'Sistema Eléctrico': 'electricalStatus',
+        'Sistema Mecánico': 'mechanicalStatus',
+        'Nivel Temperatura': 'temperatureStatus',
+        'Nivel Aceite': 'oilStatus',
+        'Nivel Hidráulico': 'hydraulicStatus',
+        'Nivel Refrigerante': 'coolantStatus',
+        'Estado Estructural': 'structuralStatus',
       };
       const fieldName = fieldMappings[column];
       currentStatus = fieldName && rowData[fieldName] ? rowData[fieldName] : 'Desconocido';
@@ -109,12 +109,25 @@
   }
   
   function confirmCreate() {
+    console.log('rowData in WorkOrderModal:', rowData);
+    console.log('rowData.id in WorkOrderModal:', rowData?.id);
+
+    const inspectionType = rowData.isUnexpected ? 'Imprevisto' : 'Inspección';
+
+    const description = [
+      inspectionType,
+      `Maquina: ${workOrderForm.maquinaInvolucrada}`,
+      `Sector: ${workOrderForm.componenteInvolucrado}`,
+      `Condición: ${currentStatus}`,
+      `Descripcion: ${workOrderForm.detalles}`,
+      `Se le asigna tarea a: ${workOrderForm.asignadoA}`
+    ].join('@');
+
     dispatch('createWorkOrder', {
-      ...workOrderForm,
-      fechaCreacion: new Date().toISOString(),
-      estado: 'Pendiente',
-      estadoComponente: currentStatus
+      inspectionId: rowData.id,
+      description: description,
     });
+
     showConfirmation = false;
   }
   
@@ -135,63 +148,28 @@
     </div>
     
     <div class="modal-body">
-      <div class="machine-info">
-        <h3>Información de la Máquina</h3>
-        <div class="info-grid">
-          <div class="info-item"><strong>Máquina:</strong> {machineFullName}</div>
-          <div class="info-item"><strong>Componente:</strong> {column}</div>
-          <div class="info-item">
-            <strong>Estado Actual:</strong> 
-            <span class="status-badge {getStatusClass(currentStatus)}">{currentStatus}</span>
-          </div>
-          <div class="info-item">
-            <strong>Descripción:</strong> 
-            <span class="status-message">{getStatusMessage(currentStatus)}</span>
-          </div>
+      <div class="info-panel">
+        <div class="info-panel-header">Panel Informativo</div>
+        <div class="info-panel-body">
+          <p><strong>Máquina:</strong> {rowData?.machine?.name} - {rowData?.machine?.brand} - {rowData?.machine?.model} - {rowData?.machine?.numInterIdentification}</p>
+          <p><strong>Área afectada:</strong> {column}</p>
+          <p><strong>Estado del área afectada:</strong> <span class="status-badge {getStatusClass(currentStatus)}">{currentStatus}</span></p>
+          <p><strong>Asignado por:</strong> {currentUser}</p>
         </div>
       </div>
       
       <form class="work-order-form" on:submit={handleSubmit}>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="areaTrabajoAsignada">Área de Trabajo:</label>
-            <input type="text" bind:value={workOrderForm.areaTrabajoAsignada} id="areaTrabajoAsignada" placeholder="Área de Trabajo" required />
-          </div>
-          <div class="form-group">
-            <label for="prioridad">Prioridad:</label>
-            <select bind:value={workOrderForm.prioridad} id="prioridad">
-              <option value="Baja">Baja</option>
-              <option value="Media">Media</option>
-              <option value="Alta">Alta</option>
-              <option value="Crítica">Crítica</option>
-            </select>
-            <small class="priority-hint">Sugerida: {getSuggestedPriority(currentStatus)}</small>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="quienAsigna">Quien Asigna:</label>
-            <input type="text" bind:value={workOrderForm.quienAsigna} id="quienAsigna" readonly />
-          </div>
-          <div class="form-group">
-            <label for="asignadoA">Asignado A:</label>
-            <input type="text" bind:value={workOrderForm.asignadoA} id="asignadoA" placeholder="Asignado A" required />
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="maquinaInvolucrada">Máquina Involucrada:</label>
-            <input type="text" bind:value={workOrderForm.maquinaInvolucrada} id="maquinaInvolucrada" readonly />
-          </div>
-          <div class="form-group">
-            <label for="componenteInvolucrado">Componente Involucrado:</label>
-            <input type="text" bind:value={workOrderForm.componenteInvolucrado} id="componenteInvolucrado" readonly />
-          </div>
-        </div>
         <div class="form-group full-width">
-          <label for="detalles">Detalles de la Orden:</label>
-          <textarea bind:value={workOrderForm.detalles} id="detalles" rows="4" 
-                    placeholder="Describa los detalles del trabajo a realizar..."></textarea>
+          <label for="detalles">Detalles de la Orden de Trabajo:</label>
+          <textarea bind:value={workOrderForm.detalles} id="detalles" rows="6" 
+                    placeholder="Describa en detalle el trabajo a realizar, los procedimientos y las precauciones necesarias..."></textarea>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="asignadoA">Asignar Tarea A:</label>
+            <input type="text" bind:value={workOrderForm.asignadoA} id="asignadoA" placeholder="Nombre del técnico o equipo" required />
+          </div>
         </div>
       </form>
     </div>
@@ -213,7 +191,6 @@
         <p><strong>Componente:</strong> {workOrderForm.componenteInvolucrado}</p>
         <p><strong>Estado:</strong> <span class="status-badge {getStatusClass(currentStatus)}">{currentStatus}</span></p>
         <p><strong>Asignado a:</strong> {workOrderForm.asignadoA}</p>
-        <p><strong>Prioridad:</strong> {workOrderForm.prioridad}</p>
       </div>
       <div class="confirmation-buttons">
         <button class="btn-cancel" on:click={cancelCreate}>Cancelar</button>
@@ -287,33 +264,31 @@
   .modal-body {
     padding: 16px;
   }
-  
-  .machine-info {
-    background-color: #f8f8f8;
-    padding: 12px;
+
+  .info-panel {
     border: 1px inset #c0c0c0;
+    background-color: #f8f8f8;
     margin-bottom: 16px;
   }
-  
-  .machine-info h3 {
-    margin: 0 0 12px 0;
-    color: #000000;
-    font-size: 11px;
+
+  .info-panel-header {
+    background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 100%);
+    padding: 6px 10px;
     font-weight: bold;
+    border-bottom: 1px solid #a0a0a0;
   }
-  
-  .info-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+
+  .info-panel-body {
+    padding: 10px;
   }
-  
-  .info-item {
-    color: #000000;
+
+  .info-panel-body p {
+    margin: 0 0 8px 0;
     font-size: 10px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+  }
+
+  .info-panel-body p:last-child {
+    margin-bottom: 0;
   }
   
   .status-badge {
