@@ -1,18 +1,19 @@
 <script>
   import { createEventDispatcher } from 'svelte';
 
-  // --- PROPS (Svelte 4 syntax) ---
+  // --- PROPS ---
   export let rowData = null;
-  export let column = '';
+  // CORRECCIÓN: Se simplifica, ahora solo se usa 'columnDef'.
+  export let columnDef = null;
   export let currentUser = '';
   
   const dispatch = createEventDispatcher();
 
-  // --- LÓGICA DE FECHA PARA EL EXTINTOR (copiada de DataGrid.svelte) ---
+  // --- LÓGICA DE FECHA PARA EL EXTINTOR ---
   function getExtintorStatus(dateString) {
     if (!dateString || typeof dateString !== "string") return "N/A";
     const expirationDate = new Date(dateString);
-    expirationDate.setUTCHours(12); // Evitar problemas de zona horaria
+    expirationDate.setUTCHours(12);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const twoMonthsFromNow = new Date();
@@ -24,57 +25,41 @@
   }
 
   // --- DERIVED STATE ---
+  let cleanColumnHeader = '';
+  $: if (columnDef && columnDef.header) {
+    cleanColumnHeader = String(columnDef.header).replace(/<br>/g, ' ');
+  } else {
+    cleanColumnHeader = 'N/A';
+  }
+
   let machineFullName = '';
   $: if (rowData && rowData.machine) {
-    machineFullName = `${rowData.machine.name} ${rowData.machine.brand} ${rowData.machine.numInterIdentification}`;
+    machineFullName = `${rowData.machine.name || ''} ${rowData.machine.brand || ''} ${rowData.machine.numInterIdentification || ''}`.trim();
   } else {
-    machineFullName = '';
+    machineFullName = 'No especificada';
   }
 
   let currentStatus;
   $: {
-    if (!rowData || !column) {
+    if (!rowData || !columnDef) {
       currentStatus = 'Desconocido';
-    } else if (column === 'Vigencia Extintor') {
-      currentStatus = getExtintorStatus(rowData.vigenciaExtintor);
     } else {
-      const fieldMappings = {
-        'Fugas Sistema': 'leakStatus',
-        'Sistema Frenos': 'brakeStatus',
-        'Correas y Poleas': 'beltsPulleysStatus',
-        'Llantas/Carriles': 'tireLanesStatus',
-        'Sistema Encendido': 'carIgnitionStatus',
-        'Sistema Eléctrico': 'electricalStatus',
-        'Sistema Mecánico': 'mechanicalStatus',
-        'Nivel Temperatura': 'temperatureStatus',
-        'Nivel Aceite': 'oilStatus',
-        'Nivel Hidráulico': 'hydraulicStatus',
-        'Nivel Refrigerante': 'coolantStatus',
-        'Estado Estructural': 'structuralStatus',
-      };
-      const fieldName = fieldMappings[column];
-      currentStatus = fieldName && rowData[fieldName] ? rowData[fieldName] : 'Desconocido';
+      const accessorKey = columnDef.accessorKey;
+      if (accessorKey === 'expirationDateFireExtinguisher') {
+          currentStatus = getExtintorStatus(rowData.expirationDateFireExtinguisher);
+      } else {
+          currentStatus = rowData[accessorKey] ?? 'Desconocido';
+      }
     }
   }
 
-  // --- LOCAL STATE (Svelte 4 syntax) ---
+  // --- LOCAL STATE ---
   let workOrderForm = {
-    areaTrabajoAsignada: '',
-    quienAsigna: currentUser,
     asignadoA: '',
-    maquinaInvolucrada: machineFullName,
-    componenteInvolucrado: column,
     detalles: '',
-    prioridad: 'Media'
   };
   let showConfirmation = false;
   
-  // --- EFFECT (Svelte 4 reactive statements) ---
-  $: workOrderForm.prioridad = getSuggestedPriority(currentStatus);
-  $: workOrderForm.maquinaInvolucrada = machineFullName;
-  $: workOrderForm.componenteInvolucrado = column;
-  $: workOrderForm.quienAsigna = currentUser;
-
   // --- FUNCTIONS ---
   function getStatusClass(status) {
     switch(status) {
@@ -85,38 +70,16 @@
     }
   }
   
-  function getSuggestedPriority(status) {
-    switch(status) {
-      case 'Óptimo': return 'Baja';
-      case 'Regular': return 'Media';
-      case 'Malo': return 'Alta';
-      default: return 'Media';
-    }
-  }
-  
-  function getStatusMessage(status) {
-    switch(status) {
-      case 'Óptimo': return 'Funcionamiento normal';
-      case 'Regular': return 'Requiere atención preventiva';
-      case 'Malo': return 'Requiere atención inmediata';
-      default: return 'Estado desconocido';
-    }
-  }
-  
   function handleSubmit(event) {
     event.preventDefault();
     showConfirmation = true;
   }
   
   function confirmCreate() {
-    console.log('rowData in WorkOrderModal:', rowData);
-    console.log('rowData.id in WorkOrderModal:', rowData?.id);
-
     const inspectionType = rowData.isUnexpected ? 'Imprevisto' : 'Inspección';
-
     const description = [
       inspectionType,
-      workOrderForm.componenteInvolucrado,
+      cleanColumnHeader,
       currentStatus,
       workOrderForm.detalles,
       workOrderForm.asignadoA
@@ -150,8 +113,8 @@
       <div class="info-panel">
         <div class="info-panel-header">Panel Informativo</div>
         <div class="info-panel-body">
-          <p><strong>Máquina:</strong> {rowData?.machine?.name} - {rowData?.machine?.brand} - {rowData?.machine?.model} - {rowData?.machine?.numInterIdentification}</p>
-          <p><strong>Área afectada:</strong> {column}</p>
+          <p><strong>Máquina:</strong> {machineFullName}</p>
+          <p><strong>Área afectada:</strong> {cleanColumnHeader}</p>
           <p><strong>Estado del área afectada:</strong> <span class="status-badge {getStatusClass(currentStatus)}">{currentStatus}</span></p>
           <p><strong>Asignado por:</strong> {currentUser}</p>
         </div>
@@ -186,8 +149,8 @@
       <h3>Confirmar Creación</h3>
       <p>¿Está seguro que desea crear esta orden de trabajo?</p>
       <div class="confirmation-details">
-        <p><strong>Máquina:</strong> {workOrderForm.maquinaInvolucrada}</p>
-        <p><strong>Componente:</strong> {workOrderForm.componenteInvolucrado}</p>
+        <p><strong>Máquina:</strong> {machineFullName}</p>
+        <p><strong>Componente:</strong> {cleanColumnHeader}</p>
         <p><strong>Estado:</strong> <span class="status-badge {getStatusClass(currentStatus)}">{currentStatus}</span></p>
         <p><strong>Asignado a:</strong> {workOrderForm.asignadoA}</p>
       </div>
@@ -486,3 +449,4 @@
     background: linear-gradient(to bottom, #70CC70 0%, #90EE90 100%);
   }
 </style>
+

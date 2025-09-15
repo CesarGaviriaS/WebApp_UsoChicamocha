@@ -1,133 +1,32 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
-  import Sidebar from './components/Sidebar.svelte';
-  import DataGrid from './components/DataGrid.svelte';
-  import WorkOrderModal from './components/WorkOrderModal.svelte';
-  import Login from './components/Login.svelte';
-  import UserManagement from './components/UserManagement.svelte';
-  import MachineManagement from './components/MachineManagement.svelte';
-  import WorkOrderManagement from './components/WorkOrderManagement.svelte';
-  import Consolidado from './components/Consolidado.svelte';
-  import NotificationDropdown from './components/NotificationDropdown.svelte';
-  import Loader from './components/Loader.svelte'; // Importar el Loader
+  import { onMount } from 'svelte';
+  import Sidebar from './components/shared/Sidebar.svelte';
+  import WorkOrderModal from './components/shared/WorkOrderModal.svelte';
+  import Login from './components/views/Login.svelte';
+  import UserManagement from './components/views/UserManagement.svelte';
+  import MachineManagement from './components/views/MachineManagement.svelte';
+  import WorkOrderManagement from './components/views/WorkOrderManagement.svelte';
+  import Consolidado from './components/views/Consolidado.svelte';
+  import NotificationDropdown from './components/shared/NotificationDropdown.svelte';
+  import Loader from './components/shared/Loader.svelte';
+  import Dashboard from './components/views/Dashboard.svelte';
 
   import { auth } from './stores/auth.js';
   import { ui, notificationCount, addNotification, notificationMessages, removeNotification } from './stores/ui.js';
   import { data } from './stores/data.js';
 
-  const STREAM_URL = 'https://pdxs8r4k-8080.use2.devtunnels.ms/inspections/stream';
-  let eventSource;
+  // --- LOCAL STATE ---
   let showNotifications = false;
-  let audioContext;
 
-  // --- Funciones de Sonido ---
-  function initAudio() {
-    if (audioContext) return;
-    try {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-    } catch (e) {
-      console.warn('Web Audio API is not supported in this browser.');
-    }
-  }
-
-  function playBeep(startTime) {
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.type = 'sawtooth';
-    gainNode.gain.setValueAtTime(0.25, startTime);
-    oscillator.frequency.setValueAtTime(880, startTime);
-    oscillator.frequency.linearRampToValueAtTime(1500, startTime + 0.15);
-    oscillator.start(startTime);
-    oscillator.stop(startTime + 0.2);
-  }
-
-  function playNotificationSound() {
-    if (!audioContext) return;
-    const now = audioContext.currentTime;
-    playBeep(now);
-    playBeep(now + 0.3);
-    playBeep(now + 0.6);
-  }
-
-  // --- Conexión al Stream ---
-  let reconnectionTimer;
-
-  function initializeEventSource() {
-    if (eventSource && (eventSource.readyState === EventSource.OPEN || eventSource.readyState === EventSource.CONNECTING)) {
-      console.log('La conexión ya está abierta o conectando.');
-      return;
-    }
-
-    eventSource = new EventSource(STREAM_URL);
-
-    eventSource.onopen = () => {
-      console.log('Conexión al stream de inspecciones establecida.');
-      if (reconnectionTimer) {
-        clearTimeout(reconnectionTimer);
-        reconnectionTimer = null;
-      }
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const newInspection = JSON.parse(event.data);
-        console.log('¡Nueva inspección inesperada recibida!', newInspection);
-        
-        if ($ui.currentView === 'dashboard') {
-          data.fetchDashboardData();
-        }
-
-        const machine = newInspection.machine;
-        const notification = {
-          id: newInspection.UUID || `fallback-${Date.now()}`,
-          text: `Imprevisto: ${machine?.name || ''} - ${machine?.model || ''} - ${machine?.numInterIdentification || ''}`
-        };
-        addNotification(notification);
-        playNotificationSound();
-
-      } catch (error) {
-        console.error('Error al parsear el dato recibido:', error, 'Dato crudo:', event.data);
-      }
-    };
-
-    eventSource.onerror = (error) => {
-      console.error('Error en la conexión con el servidor (EventSource):', error);
-      eventSource.close();
-      
-      if (!reconnectionTimer) {
-        console.log('Intentando reconectar en 5 segundos...');
-        reconnectionTimer = setTimeout(initializeEventSource, 5000);
-      }
-    };
-  }
-
-  // --- Ciclo de Vida ---
+  // --- LIFECYCLE HOOKS ---
   onMount(async () => {
-    window.addEventListener('click', initAudio, { once: true });
-
-    if (await auth.checkAuth()) {
+    const isAuthenticated = await auth.checkAuth();
+    if (isAuthenticated) {
       data.fetchDashboardData();
-      initializeEventSource();
     }
   });
 
-  onDestroy(() => {
-    if (eventSource) {
-      console.log('Cerrando conexión al stream.');
-      eventSource.close();
-    }
-    if (reconnectionTimer) {
-      clearTimeout(reconnectionTimer);
-    }
-    window.removeEventListener('click', initAudio);
-  });
-
-  // --- Handlers de UI ---
+  // --- EVENT HANDLERS ---
   function toggleNotifications() {
     showNotifications = !showNotifications;
   }
@@ -136,14 +35,11 @@
     const notificationId = event.detail;
     removeNotification(notificationId);
   }
-
+  
   function handleNavigation(event) {
-    const newView = event.detail;
-    ui.setCurrentView(newView);
-    showNotifications = false;
-
-    // Fetch data based on the new view
-    switch (newView) {
+    const view = event.detail;
+    ui.setCurrentView(view);
+    switch (view) {
       case 'dashboard':
         data.fetchDashboardData();
         break;
@@ -156,30 +52,33 @@
       case 'work-orders':
         data.fetchWorkOrders();
         break;
-      case 'consolidado':
-        // No initial data fetch here, component handles it
-        break;
-      case 'inspections': 
-        data.fetchInspections();
-        break;
-     
     }
   }
 
+  // CORRECCIÓN: Esta función ahora pasa los objetos completos al store.
   function handleCellContextMenu(event) {
-    const { data, column } = event.detail;
-    ui.openWorkOrderModal(data, column);
+    const { row, column } = event.detail;
+    if (column.meta?.isStatus || column.meta?.isDateStatus) {
+      // Se pasa el objeto de la fila ('row') y el objeto de la columna ('column') directamente.
+      ui.openWorkOrderModal(row, column);
+    }
   }
 
   async function handleCreateWorkOrder(event) {
-    const workOrderData = event.detail;
     ui.setSaving(true);
     try {
-      await data.createWorkOrder(workOrderData);
-      console.log('Orden de trabajo creada con éxito:', workOrderData);
+      await data.createWorkOrder(event.detail);
+      addNotification({
+        id: Date.now(),
+        text: `Orden de trabajo para "${event.detail.description.split('|')[1]}" creada.`
+      });
       ui.closeWorkOrderModal();
-    } catch (error) {
-      console.error('Error al crear orden de trabajo:', error);
+    } catch (err) {
+      console.error("Error creating work order:", err);
+      addNotification({
+        id: Date.now(),
+        text: `Error al crear orden: ${err.message}`
+      });
     } finally {
       ui.setSaving(false);
     }
@@ -188,134 +87,6 @@
   function handleCancelWorkOrder() {
     ui.closeWorkOrderModal();
   }
-
-  const dashboardColumns = [
-    {
-      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }),
-      id: "fecha",
-      header: "Fecha",
-      size: 80,
-      sortingFn: (rowA, rowB, columnId) => {
-          const dateA = new Date(rowA.original.dateStamp + 'Z');
-          const dateB = new Date(rowB.original.dateStamp + 'Z');
-          return dateA.getTime() - dateB.getTime();
-      },
-    },
-    {
-      accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleTimeString('en-GB', { timeZone: 'America/Bogota' }), // Formato 24h
-      id: "hora",
-      header: "Hora",
-      size: 50,
-    },
-    {
-      accessorFn: (row) => `${row.machine.name} ${row.machine.model} ${row.machine.numInterIdentification}`,
-      id: "maquina",
-      header: "MÁQUINA",
-      size: 250,
-    },
-    { accessorKey: "hourMeter", header: "Horómetro", size: 80 },
-    {
-      accessorKey: "leakStatus",
-      header: "Fugas Sistema",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "brakeStatus",
-      header: "Sistema Frenos",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "beltsPulleysStatus",
-      header: "Correas y Poleas",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "tireLanesStatus",
-      header: "Llantas/Carriles",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "carIgnitionStatus",
-      header: "Sistema Encendido",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "electricalStatus",
-      header: "Sistema Eléctrico",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "mechanicalStatus",
-      header: "Sistema Mecánico",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "temperatureStatus",
-      header: "Nivel Temperatura",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "oilStatus",
-      header: "Nivel Aceite",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "hydraulicStatus",
-      header: "Nivel Hidráulico",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "coolantStatus",
-      header: "Nivel Refrigerante",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "structuralStatus",
-      header: "Estado Estructural",
-      size: 100,
-      meta: { isStatus: true },
-    },
-    {
-      accessorKey: "expirationDateFireExtinguisher",
-      header: "Vigencia Extintor",
-      size: 110,
-      meta: { isDateStatus: true },
-    },
-    {
-      accessorKey: "observations",
-      header: "Observaciones",
-      size: 350,
-      meta: { isMultiline: true },
-    },
-    {
-      accessorKey: "greasingAction",
-      header: "Acción de Engrase",
-      size: 150,
-    },
-    {
-      accessorKey: "greasingObservations",
-      header: "Observaciones de Engrase",
-      size: 350,
-      meta: { isMultiline: true },
-    },
-    {
-      accessorFn: (row) => row.user.fullName,
-      id: "responsable",
-      header: "Responsable",
-      size: 160,
-    },
-  ];
 </script>
 
 <svelte:head>
@@ -385,26 +156,13 @@
       </header>
 
       <div class="content">
-        {#if $data.isLoading}
+        {#if $data.isLoading && !$auth.isRefreshing}
           <div class="loader-container"><Loader /></div>
         {:else if $data.error}
           <p style="color: red;">Error: {$data.error}</p>
         {:else}
           {#if $ui.currentView === 'dashboard'}
-            <div class="grid-container">
-              <DataGrid 
-                columns={dashboardColumns}
-                data={$data.dashboardData} 
-                on:cellContextMenu={handleCellContextMenu}
-              />
-            </div>
-            <div class="footer-controls">
-              <div class="download-buttons">
-                <button class="download-btn">Descargar Hoja</button>
-                <button class="download-btn">Descargar Tabla</button>
-                <button class="download-btn">Descargar Libro</button>
-              </div>
-            </div>
+            <Dashboard on:cellContextMenu={handleCellContextMenu} />
           {:else if $ui.currentView === 'users'}
             <UserManagement />
           {:else if $ui.currentView === 'machines'}
@@ -421,7 +179,8 @@
     {#if $ui.showWorkOrderModal}
       <WorkOrderModal 
         rowData={$ui.selectedRowData}
-        column={$ui.selectedColumn}
+        
+        columnDef={$ui.selectedColumnDef}
         currentUser={$auth.currentUser?.name}
         on:createWorkOrder={handleCreateWorkOrder}
         on:cancel={handleCancelWorkOrder}
@@ -429,6 +188,7 @@
     {/if}
   </div>
 {/if}
+
 <style>
   .overlay {
     position: fixed;
@@ -562,37 +322,5 @@
     padding: 16px;
     background-color: #c0c0c0;
   }
-  .grid-container {
-    flex: 1;
-    background-color: white;
-    border: 2px inset #c0c0c0;
-    border-top-color: #808080;
-    border-left-color: #808080;
-    border-right-color: #dfdfdf;
-    border-bottom-color: #dfdfdf;
-    overflow: hidden;
-  }
-  .footer-controls {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    margin-top: 16px;
-    padding: 8px 0;
-  }
-  .download-buttons {
-    display: flex;
-    gap: 8px;
-  }
-  .download-btn {
-    padding: 6px 12px;
-    background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 100%);
-    border: 1px outset #c0c0c0;
-    cursor: pointer;
-    font-size: 11px;
-    font-family: inherit;
-    color: #000000;
-  }
-  .download-btn:hover {
-    background: linear-gradient(to bottom, #f0f0f0 0%, #d0d0d0 100%);
-  }
 </style>
+

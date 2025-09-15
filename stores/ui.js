@@ -21,7 +21,6 @@ function createPersistedStore(key, startValue) {
 
 // --- Stores de Notificaciones ---
 export const notificationCount = createPersistedStore('notificationCount', 0);
-// Ahora guardamos objetos {id, text} en lugar de solo strings
 export const notificationMessages = createPersistedStore('notificationMessages', []);
 
 // --- Acciones de Notificaciones ---
@@ -46,24 +45,24 @@ function createUIStore() {
     currentView: 'dashboard',
     showWorkOrderModal: false,
     selectedRowData: null,
-    selectedColumn: null,
-    isSaving: false // Estado para el loader de guardado
+    // CORRECCIÓN: Se renombra para reflejar que es el objeto de definición completo.
+    selectedColumnDef: null,
+    isSaving: false
   });
 
   return {
     subscribe,
     setCurrentView: (view) => update(store => ({ ...store, currentView: view })),
-    openWorkOrderModal: (data, column) => update(store => ({
+    // CORRECCIÓN: La función ahora espera el objeto de definición de la columna.
+    openWorkOrderModal: (data, columnDef) => update(store => ({
       ...store,
       showWorkOrderModal: true,
       selectedRowData: data,
-      selectedColumn: column
+      selectedColumnDef: columnDef
     })),
-    closeWorkOrderModal: () => update(store => ({ ...store, showWorkOrderModal: false, selectedRowData: null, selectedColumn: null })),
+    closeWorkOrderModal: () => update(store => ({ ...store, showWorkOrderModal: false, selectedRowData: null, selectedColumnDef: null })),
     setSaving: (isSaving) => update(store => ({ ...store, isSaving }))
   };
 }
 
 export const ui = createUIStore();
-
-

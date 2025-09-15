@@ -1,17 +1,23 @@
 <script>
   import { onMount } from 'svelte';
-  import fetchWithAuth, { fetchWithoutV1 } from '../stores/api.js'; // Corrected import for fetchWithAuth
-  import ConsolidadoTable from './ConsolidadoTable.svelte';
+  import fetchWithAuth, { fetchWithoutV1 } from '../../stores/api.js';
+  import DataGrid from '../shared/DataGrid.svelte';
+  // CAMBIO: Se importa la nueva función en lugar de la constante
+  import { createConsolidadoColumns } from '../../config/table-definitions.js';
 
   let distritoMachines = [];
   let asociacionMachines = [];
   let isLoading = true;
 
+  // CAMBIO: Se definen las columnas aquí para poder pasarlas al DataGrid
+  const distritoColumns = createConsolidadoColumns('Distrito');
+  const asociacionColumns = createConsolidadoColumns('Asociación');
+
   onMount(async () => {
     isLoading = true;
     try {
       const [machines, motorChanges, hydraulicChanges] = await Promise.all([
-        fetchWithAuth('machine'), // Directly fetch machines
+        fetchWithAuth('machine'),
         fetchWithoutV1('oil-changes/motor'),
         fetchWithoutV1('oil-changes/hydraulic'),
       ]);
@@ -31,7 +37,6 @@
       }
     } catch (error) {
       console.error("Error al cargar datos del consolidado:", error);
-      // Optionally, show an error message to the user
     } finally {
       isLoading = false;
     }
@@ -42,8 +47,16 @@
   {#if isLoading}
     <p>Cargando datos del consolidado...</p>
   {:else}
-    <ConsolidadoTable title="Maquinaria de Distrito" machines={distritoMachines} />
-    <ConsolidadoTable title="Maquinaria de Asociación" machines={asociacionMachines} />
+    <div>
+      
+      <!-- CAMBIO: Se usan las columnas específicas para el Distrito -->
+      <DataGrid columns={distritoColumns} data={distritoMachines} />
+    </div>
+    <div>
+      
+      <!-- CAMBIO: Se usan las columnas específicas para la Asociación -->
+      <DataGrid columns={asociacionColumns} data={asociacionMachines} />
+    </div>
   {/if}
 </div>
 
@@ -54,5 +67,8 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
+  }
+  h3 {
+    margin-bottom: 10px;
   }
 </style>

@@ -1,31 +1,31 @@
 <script>
-  import { data } from '../stores/data.js';
-
+  import { data } from '../../stores/data.js';
+  import DataGrid from '../shared/DataGrid.svelte';
+  import { machineColumns } from '../../config/table-definitions.js';
 
   let isSubmitting = false;
-  let errorMessage = ''; 
+  let errorMessage = '';
   const initialMachineState = {
-    name: '', 
-    model: '', 
-    numEngine: '', 
+    name: '',
+    model: '',
+    numEngine: '',
     numInterIdentification: '',
-    brand: '', 
-    soat: '', 
+    brand: '',
+    soat: '',
     runt: '',
     belongsTo: 'distrito' // Valor por defecto
   };
   let newMachine = { ...initialMachineState };
   let editingMachine = null;
   let showEditModal = false;
-  let machineToDelete = null;
+  let machineToDelete = null; // Declarado una sola vez aquí
 
   // --- CRUD FUNCTIONS (llaman al store) ---
   async function handleCreateMachine(event) {
     event.preventDefault();
     isSubmitting = true;
-    errorMessage = ''; 
+    errorMessage = '';
     try {
-      // Aseguramos que el payload tiene la estructura correcta
       const payload = {
         name: newMachine.name,
         belongsTo: newMachine.belongsTo,
@@ -40,7 +40,7 @@
       newMachine = { ...initialMachineState };
     } catch (e) {
       console.error("Fallo al crear máquina:", e);
-      errorMessage = e.message || 'Error al crear máquina.'; 
+      errorMessage = e.message || 'Error al crear máquina.';
     } finally {
       isSubmitting = false;
     }
@@ -52,7 +52,6 @@
     isSubmitting = true;
     errorMessage = ''; // Clear previous errors
     try {
-      // Aseguramos que el payload tiene la estructura correcta
       const payload = {
         id: editingMachine.id,
         name: editingMachine.name,
@@ -87,11 +86,21 @@
   }
 
   // --- MODAL FUNCTIONS ---
+  function handleAction(event) {
+    const { type, data: machineData } = event.detail;
+    if (type === 'edit') {
+      openEditModal(machineData);
+    } else if (type === 'delete') {
+      machineToDelete = machineData;
+    }
+  }
+
   function openEditModal(machine) {
     // Asegurarse de que belongsTo tenga un valor al abrir el modal
     editingMachine = { ...machine, belongsTo: machine.belongsTo || 'distrito' };
     showEditModal = true;
   }
+  
   function closeEditModal() {
     showEditModal = false;
     editingMachine = null;
@@ -135,47 +144,7 @@
   </div>
 
   <div class="table-wrapper">
-    {#if $data.isLoading}
-      <p>Cargando máquinas...</p>
-    {:else if $data.error}
-      <p class="error-message">{$data.error}</p>
-    {:else}
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Marca</th>
-            <th>Modelo</th>
-            <th>Pertenece a</th>
-            <th>Núm. Motor</th>
-            <th>ID Interno</th>
-            <th>SOAT</th>
-            <th>RUNT</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each $data.machines as machine (machine.id)}
-            <tr>
-              <td>{machine.id}</td>
-              <td>{machine.name}</td>
-              <td>{machine.brand}</td>
-              <td>{machine.model}</td>
-              <td>{machine.belongsTo}</td>
-              <td>{machine.numEngine}</td>
-              <td>{machine.numInterIdentification}</td>
-              <td>{machine.soat}</td>
-              <td>{machine.runt}</td>
-              <td class="actions">
-                <button class="btn-action btn-edit" on:click={() => openEditModal(machine)}>Editar</button>
-                <button class="btn-action btn-delete" on:click={() => machineToDelete = machine}>Eliminar</button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
+    <DataGrid columns={machineColumns} data={$data.machines} on:action={handleAction} />
   </div>
 </div>
 
@@ -228,8 +197,6 @@
     </div>
   </div>
 {/if}
-
-
 
 <style>
   .management-container {
@@ -364,7 +331,7 @@
     border: 1px outset #c0c0c0;
     cursor: pointer;
   }
-.btn-save { font-weight: bold; }
+  .btn-save { font-weight: bold; }
   .loader-container {
     display: flex;
     justify-content: center;

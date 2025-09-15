@@ -1,6 +1,8 @@
 <script>
-  import { data } from "../stores/data.js";
+  import { data } from "../../stores/data.js";
   import { onDestroy } from "svelte";
+  import DataGrid from '../shared/DataGrid.svelte';
+  import { userColumns } from '../../config/table-definitions.js';
 
   // --- LOCAL STATE ---
   let isSubmitting = false;
@@ -96,6 +98,15 @@
   }
 
   // --- MODAL LOGIC ---
+  function handleAction(event) {
+    const { type, data: userData } = event.detail;
+    if (type === 'edit') {
+      openEditModal(userData);
+    } else if (type === 'delete') {
+      openDeleteModal(userData);
+    }
+  }
+
   function openDeleteModal(user) {
     userToDelete = user;
     showDeleteModal = true;
@@ -169,44 +180,7 @@
 
   <!-- Tabla de Usuarios (actualizada) -->
   <div class="table-wrapper">
-    {#if $data.isLoading}
-      <p>Cargando usuarios...</p>
-    {:else if $data.error && !showEditModal && !showDeleteModal}
-      <p class="error-message">{$data.error}</p>
-    {/if}
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Usuario</th>
-          <th>Gmail</th>
-          <th>Nombre Completo</th>
-          <th>Rol</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each $data.users as user (user.id)}
-          <tr>
-            <td>{user.id}</td>
-            <td>{user.username}</td>
-            <td>{user.email}</td>
-            <td>{user.fullName}</td>
-            <td>{user.role}</td>
-            <td class="actions">
-              <button
-                class="btn-action btn-edit"
-                on:click={() => openEditModal(user)}>Editar</button
-              >
-              <button
-                class="btn-action btn-delete"
-                on:click={() => openDeleteModal(user)}>Eliminar</button
-              >
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <DataGrid columns={userColumns} data={$data.users} on:action={handleAction} />
   </div>
 </div>
 
@@ -323,34 +297,6 @@
     overflow-y: auto;
     background-color: #ffffff;
     border: 2px inset #c0c0c0;
-  }
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .data-table th,
-  .data-table td {
-    border: 1px solid #808080;
-    padding: 8px;
-    text-align: left;
-  }
-  .data-table th {
-    background: #c0c0c0;
-  }
-  .actions {
-    display: flex;
-    gap: 8px;
-  }
-  .btn-action {
-    padding: 2px 8px;
-    border: 1px outset #c0c0c0;
-    cursor: pointer;
-  }
-  .btn-edit {
-    background-color: #f0f0f0;
-  }
-  .btn-delete {
-    background-color: #ffbaba;
   }
   .error-message {
     color: red;

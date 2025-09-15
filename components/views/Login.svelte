@@ -1,6 +1,6 @@
 <script>
-  import { auth } from "../stores/auth.js";
-  import { data as dataStore } from "../stores/data.js";
+  import { auth } from "../../stores/auth.js";
+  import { data as dataStore } from "../../stores/data.js";
 
   let username = "";
   let password = "";
