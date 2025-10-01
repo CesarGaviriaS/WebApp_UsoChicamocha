@@ -102,7 +102,7 @@
   }
 </script>
 
-<div class="modal-overlay" on:click={onCancel} on:keydown={(e) => e.key === 'Escape' && onCancel()}>
+<div class="modal-overlay" on:keydown={(e) => e.key === 'Escape' && onCancel()}>
   <div class="modal-content" on:click|stopPropagation>
     <div class="modal-header">
       <h2>Crear Orden de Trabajo</h2>

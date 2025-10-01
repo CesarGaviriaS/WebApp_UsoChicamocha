@@ -1,5 +1,6 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import Sidebar from './components/shared/Sidebar.svelte';
   import WorkOrderModal from './components/shared/WorkOrderModal.svelte';
   import Login from './components/views/Login.svelte';
@@ -10,20 +11,390 @@
   import NotificationDropdown from './components/shared/NotificationDropdown.svelte';
   import Loader from './components/shared/Loader.svelte';
   import Dashboard from './components/views/Dashboard.svelte';
-
+  import { EventSourcePolyfill } from 'event-source-polyfill';
+  import OilManagement from './components/views/OilManagement.svelte';
   import { auth } from './stores/auth.js';
   import { ui, notificationCount, addNotification, notificationMessages, removeNotification } from './stores/ui.js';
   import { data } from './stores/data.js';
+    import ImageCarouselModal from './components/shared/ImageCarouselModal.svelte';
 
+// --- LÓGICA DEL MODAL DE IMÁGENES ---
+  let isImageModalOpen = false;
+  let imageModalUrls = [];
+  let isImageModalLoading = false;
   // --- LOCAL STATE ---
   let showNotifications = false;
+  let inspectionEventSource;
+  let dataUpdateEventSource;
+  let soatRuntEventSource;
+  let oilChangeEventSource;
+  let audioCtx;
+  let soundNeedsActivation = true;
+
+
+  async function openImageModal(inspectionId) {
+    isImageModalOpen = true;
+    isImageModalLoading = true;
+    try {
+      imageModalUrls = await data.fetchInspectionImages(inspectionId);
+    } catch (e) {
+      imageModalUrls = []; // En caso de error, muestra el modal vacío
+    } finally {
+      isImageModalLoading = false;
+    }
+  }
+
+  function closeImageModal() {
+    isImageModalOpen = false;
+    imageModalUrls = [];
+  }
+  // --- LÓGICA DE SONIDO ---
+  function activateSound() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        soundNeedsActivation = false;
+        console.log("Contexto de audio activado por el usuario.");
+      } catch(e) {
+        console.error("Web Audio API no es soportada en este navegador.");
+        soundNeedsActivation = false;
+      }
+    } else {
+        soundNeedsActivation = false;
+    }
+  }
+
+function playNotificationSound() {
+  if (!audioCtx) {
+    console.warn("El audio debe ser activado por un gesto del usuario.");
+    return;
+  }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+
+  const now = audioCtx.currentTime;
+  const oscillator = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(800, now);
+  oscillator.frequency.linearRampToValueAtTime(600, now + 0.15);
+
+  gainNode.gain.setValueAtTime(0, now);
+  gainNode.gain.linearRampToValueAtTime(0.4, now + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+  
+  oscillator.start(now);
+  oscillator.stop(now + 0.25);
+}
+
+  // --- LÓGICA DE NOTIFICACIONES EN TIEMPO REAL ---
+  function connectToInspectionStream() {
+  if (inspectionEventSource) {
+    inspectionEventSource.close();
+    inspectionEventSource = null;
+  }
+
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const token = localStorage.getItem('accessToken');
+
+  if (!BASE_URL || !token) {
+    console.warn("No se puede conectar al stream: falta la URL base o el token.");
+    return;
+  }
+  
+  const streamUrl = `${BASE_URL}/inspections/stream`;
+  
+  // 2. Usa 'EventSourcePolyfill' y pasa las cabeceras
+  inspectionEventSource = new EventSourcePolyfill(streamUrl, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  inspectionEventSource.onopen = () => console.log("✅ Conectado al stream de notificaciones de inspecciones.");
+  
+    inspectionEventSource.onmessage = (event) => {
+        const message = event.data;
+        if (message === 'stream_open') {
+          console.log('Notificaciones de inspecciones: ✅');
+          return;
+        }
+        try {
+          const newInspection = JSON.parse(event.data);
+          const machineInfo = newInspection.machine ? `${newInspection.machine.name} ${newInspection.machine.model}` : 'una máquina';
+ 
+          addNotification({
+            id: newInspection.UUID || Date.now(),
+            text: `¡IMPREVISTO EN ${machineInfo}!`
+          });
+ 
+          playNotificationSound();
+ 
+          const currentView = get(ui).currentView;
+          if (currentView === 'dashboard') {
+            const dashboardState = get(data).dashboard;
+            data.fetchDashboardData(dashboardState.currentPage, dashboardState.pageSize);
+          }
+        } catch (e) {
+          console.error("Error procesando mensaje del stream:", e);
+        }
+      };
+    inspectionEventSource.onerror = (err) => {
+      console.error("Error en la conexión con el stream de inspecciones. Se cerrará la conexión.", err);
+      inspectionEventSource.close();
+    };
+  }
+  
+  function connectToDataUpdateStream() {
+  if (dataUpdateEventSource) {
+    dataUpdateEventSource.close();
+    dataUpdateEventSource = null;
+  }
+
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const token = localStorage.getItem('accessToken');
+
+  if (!BASE_URL || !token) {
+    console.warn("No se puede conectar al stream: falta la URL base o el token.");
+    return;
+  }
+  
+  const streamUrl = `${BASE_URL}/new-data/notifications/stream`;
+  
+  // 3. Haz lo mismo aquí: usa 'EventSourcePolyfill' con las cabeceras
+  dataUpdateEventSource = new EventSourcePolyfill(streamUrl, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  dataUpdateEventSource.onopen = () => console.log("✅ Conectado al stream de actualización de datos.");
+
+    dataUpdateEventSource.onmessage = (event) => {
+        const message = event.data;
+        if (message === 'stream_open') {
+          console.log('Notificaciones de actualización: ✅');
+          return;
+        }
+        const currentView = get(ui).currentView;
+        const dataState = get(data);
+
+        console.log(`Mensaje de actualización recibido: ${message}, vista actual: ${currentView}`);
+
+        switch (message) {
+            case 'inspections-updated':
+                if (currentView === 'dashboard') {
+                    console.log('Recargando tabla de inspecciones...');
+                    data.fetchDashboardData(dataState.dashboard.currentPage, dataState.dashboard.pageSize);
+                }
+                break;
+            case 'machines-updated':
+                if (currentView === 'machines') {
+                    console.log('Recargando tabla de máquinas...');
+                    data.fetchMachines();
+                }
+                break;
+            case 'users-updated':
+                if (currentView === 'users') {
+                    console.log('Recargando tabla de usuarios...');
+                    data.fetchUsers();
+                }
+                break;
+            case 'orders-updated':
+                if (currentView === 'work-orders') {
+                    console.log('Recargando tabla de órdenes de trabajo...');
+                    data.fetchWorkOrders(dataState.workOrders.currentPage, dataState.workOrders.pageSize);
+                }
+                break;
+            case 'oil-changes-updated':
+              if (currentView === 'consolidado') {
+                console.log('Recargando tabla de consolidado...');
+                data.fetchConsolidatedData();
+              }
+              break;
+        }
+    };
+    dataUpdateEventSource.onerror = (err) => {
+        console.error("Error en la conexión con el stream de actualización. Se cerrará la conexión.", err);
+        dataUpdateEventSource.close();
+    };
+  }
+
+  function connectToSoatRuntStream() {
+    if (soatRuntEventSource) {
+      soatRuntEventSource.close();
+      soatRuntEventSource = null;
+    }
+
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    const token = localStorage.getItem('accessToken');
+
+    if (!BASE_URL || !token) {
+      console.warn("No se puede conectar al stream SOAT/RUNT: falta la URL base o el token.");
+      return;
+    }
+
+    const streamUrl = `${BASE_URL}/soat/runt/notifications/stream`;
+
+    soatRuntEventSource = new EventSourcePolyfill(streamUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    soatRuntEventSource.onopen = () => console.log("✅ Conectado al stream de notificaciones SOAT/RUNT.");
+
+    soatRuntEventSource.onmessage = (event) => {
+      const message = event.data;
+      if (message === 'stream_open') {
+        console.log('Notificaciones SOAT/RUNT: ✅');
+        return;
+      }
+      try {
+        const notificationData = JSON.parse(event.data);
+        addNotification({
+          id: notificationData.id || Date.now(),
+          text: notificationData.message || 'Notificación SOAT/RUNT'
+        });
+        // No sound for this stream
+      } catch (e) {
+        console.error("Error procesando mensaje del stream SOAT/RUNT:", e);
+      }
+    };
+
+    soatRuntEventSource.onerror = (err) => {
+      console.error("Error en la conexión con el stream SOAT/RUNT. Se cerrará la conexión.", err);
+      soatRuntEventSource.close();
+    };
+  }
+
+  function connectToOilChangeStream() {
+    if (oilChangeEventSource) {
+      oilChangeEventSource.close();
+      oilChangeEventSource = null;
+    }
+
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+    const token = localStorage.getItem('accessToken');
+
+    if (!BASE_URL || !token) {
+      console.warn("No se puede conectar al stream de cambios de aceite: falta la URL base o el token.");
+      return;
+    }
+
+    const streamUrl = `${BASE_URL}/oil_change/notifications/stream`;
+
+    oilChangeEventSource = new EventSourcePolyfill(streamUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    oilChangeEventSource.onopen = () => console.log("✅ Conectado al stream de notificaciones de cambios de aceite.");
+
+    oilChangeEventSource.onmessage = (event) => {
+      const message = event.data;
+      if (message === 'stream_open') {
+        console.log('Notificaciones de cambios de aceite: ✅');
+        return;
+      }
+      try {
+        const notificationData = JSON.parse(event.data);
+        addNotification({
+          id: notificationData.id || Date.now(),
+          text: notificationData.message || 'Notificación de cambio de aceite'
+        });
+        // No sound for this stream
+      } catch (e) {
+        console.error("Error procesando mensaje del stream de cambios de aceite:", e);
+      }
+    };
+
+    oilChangeEventSource.onerror = (err) => {
+      console.error("Error en la conexión con el stream de cambios de aceite. Se cerrará la conexión.", err);
+      oilChangeEventSource.close();
+    };
+  }
+
+  function disconnectFromStreams() {
+    if (inspectionEventSource) {
+      inspectionEventSource.close();
+      inspectionEventSource = null;
+      console.log("Desconectado del stream de inspecciones.");
+    }
+    if (dataUpdateEventSource) {
+      dataUpdateEventSource.close();
+      dataUpdateEventSource = null;
+      console.log("Desconectado del stream de actualización de datos.");
+    }
+    if (soatRuntEventSource) {
+      soatRuntEventSource.close();
+      soatRuntEventSource = null;
+      console.log("Desconectado del stream SOAT/RUNT.");
+    }
+    if (oilChangeEventSource) {
+      oilChangeEventSource.close();
+      oilChangeEventSource = null;
+      console.log("Desconectado del stream de cambios de aceite.");
+    }
+  }
+
+ // RUTA: App.svelte
+
+async function loadDataForView(view) { 
+  try { 
+    switch (view) {
+      case 'dashboard':
+        await data.fetchDashboardData(); 
+        break;
+      case 'users':
+        await data.fetchUsers();
+        break;
+      case 'machines':
+        await data.fetchMachines();
+        break;
+      case 'work-orders':
+        await data.fetchWorkOrders();
+        break;
+      case 'consolidado':
+        await data.fetchConsolidadoData();
+        break;
+      case 'oilManagement':
+        await data.fetchOils();
+        break;
+    }
+  } catch (error) { 
+    console.warn("Carga de datos interrumpida por fallo de autenticación (comportamiento esperado).");
+  }
+}
 
   // --- LIFECYCLE HOOKS ---
   onMount(async () => {
     const isAuthenticated = await auth.checkAuth();
     if (isAuthenticated) {
-      data.fetchDashboardData();
+      const currentView = get(ui).currentView;
+      loadDataForView(currentView);
     }
+  });
+
+  auth.subscribe(value => {
+    if (value.isAuthenticated) {
+      connectToInspectionStream();
+      connectToDataUpdateStream();
+      connectToSoatRuntStream();
+      connectToOilChangeStream();
+    } else {
+      disconnectFromStreams();
+    }
+  });
+  
+  onDestroy(() => {
+    disconnectFromStreams();
   });
 
   // --- EVENT HANDLERS ---
@@ -39,39 +410,28 @@
   function handleNavigation(event) {
     const view = event.detail;
     ui.setCurrentView(view);
-    switch (view) {
-      case 'dashboard':
-        data.fetchDashboardData();
-        break;
-      case 'users':
-        data.fetchUsers();
-        break;
-      case 'machines':
-        data.fetchMachines();
-        break;
-      case 'work-orders':
-        data.fetchWorkOrders();
-        break;
-    }
+    loadDataForView(view);
   }
 
-  // CORRECCIÓN: Esta función ahora pasa los objetos completos al store.
   function handleCellContextMenu(event) {
-    const { row, column } = event.detail;
-    if (column.meta?.isStatus || column.meta?.isDateStatus) {
-      // Se pasa el objeto de la fila ('row') y el objeto de la columna ('column') directamente.
-      ui.openWorkOrderModal(row, column);
+    const { row, columnDef } = event.detail;
+    if (columnDef.meta?.isStatus || columnDef.meta?.isDateStatus) {
+      ui.openWorkOrderModal(row, columnDef);
     }
   }
-
+function handleGridAction(event) {
+    // Busca la propiedad 'data' y renómbrala a 'row'
+    const { type, data: row } = event.detail; 
+    
+    // Ahora 'row' sí contiene los datos de la fila
+    if (type === 'view_images' && row && row.id) { 
+        openImageModal(row.id); 
+    }
+}
   async function handleCreateWorkOrder(event) {
     ui.setSaving(true);
     try {
       await data.createWorkOrder(event.detail);
-      addNotification({
-        id: Date.now(),
-        text: `Orden de trabajo para "${event.detail.description.split('|')[1]}" creada.`
-      });
       ui.closeWorkOrderModal();
     } catch (err) {
       console.error("Error creating work order:", err);
@@ -94,6 +454,15 @@
 </svelte:head>
 
 <svelte:window on:click={() => (showNotifications = false)} />
+
+{#if soundNeedsActivation && $auth.isAuthenticated}
+  <div class="sound-activation-overlay" on:click={activateSound}>
+    <div class="message-box">
+      <h2>Activar Sonido</h2>
+      <p>Haga clic en cualquier lugar para habilitar las notificaciones de sonido.</p>
+    </div>
+  </div>
+{/if}
 
 {#if $ui.isSaving}
   <div class="overlay">
@@ -135,6 +504,8 @@
               Gestión de Órdenes de Trabajo
             {:else if $ui.currentView === 'consolidado'}
               Consolidado de Maquinaria
+            {:else if $ui.currentView === 'oilManagement'}
+              Gestión de Aceites
             {/if}
           </h2>
         </div>
@@ -156,22 +527,21 @@
       </header>
 
       <div class="content">
-        {#if $data.isLoading && !$auth.isRefreshing}
-          <div class="loader-container"><Loader /></div>
-        {:else if $data.error}
-          <p style="color: red;">Error: {$data.error}</p>
-        {:else}
-          {#if $ui.currentView === 'dashboard'}
-            <Dashboard on:cellContextMenu={handleCellContextMenu} />
-          {:else if $ui.currentView === 'users'}
-            <UserManagement />
-          {:else if $ui.currentView === 'machines'}
-            <MachineManagement />
-          {:else if $ui.currentView === 'work-orders'}
-            <WorkOrderManagement />
-          {:else if $ui.currentView === 'consolidado'}
-            <Consolidado />
-          {/if}
+        {#if $ui.currentView === 'dashboard'}
+          <Dashboard 
+            on:gridaction={handleGridAction}
+            on:cellContextMenu={handleCellContextMenu} 
+          />
+        {:else if $ui.currentView === 'users'}
+          <UserManagement />
+        {:else if $ui.currentView === 'machines'}
+          <MachineManagement />
+        {:else if $ui.currentView === 'work-orders'}
+          <WorkOrderManagement />
+        {:else if $ui.currentView === 'consolidado'}
+          <Consolidado />
+        {:else if $ui.currentView === 'oilManagement'}
+            <OilManagement />
         {/if}
       </div>
     </main>
@@ -179,15 +549,24 @@
     {#if $ui.showWorkOrderModal}
       <WorkOrderModal 
         rowData={$ui.selectedRowData}
-        
         columnDef={$ui.selectedColumnDef}
         currentUser={$auth.currentUser?.name}
         on:createWorkOrder={handleCreateWorkOrder}
         on:cancel={handleCancelWorkOrder}
       />
     {/if}
+
+    {#if isImageModalOpen}
+      <ImageCarouselModal
+        imageUrls={imageModalUrls}
+        isLoading={isImageModalLoading}
+        on:close={closeImageModal}
+      />
+    {/if}
+    
   </div>
 {/if}
+
 
 <style>
   .overlay {
@@ -321,6 +700,34 @@
     flex-direction: column;
     padding: 16px;
     background-color: #c0c0c0;
+    min-height: 0;
+  }
+
+  .sound-activation-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    cursor: pointer;
+    color: white;
+  }
+  .message-box {
+    padding: 24px 48px;
+    background: #e0e0e0;
+    color: #000;
+    border: 2px outset #c0c0c0;
+    font-size: 14px;
+    text-align: center;
+    font-family: 'MS Sans Serif', 'Tahoma', sans-serif;
+  }
+  .message-box h2 {
+    margin: 0 0 12px 0;
   }
 </style>
 

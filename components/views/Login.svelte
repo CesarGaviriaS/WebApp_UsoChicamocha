@@ -13,15 +13,11 @@
     error = "";
 
     try {
-      // 1. Llama a la función de login del store
       const result = await auth.login(username, password);
 
       if (result.success) {
-        // 2. Si el login es exitoso, pide los datos del dashboard.
-        // App.svelte reaccionará y mostrará la vista correcta.
         dataStore.fetchDashboardData();
       } else {
-        // 3. Si hay un error, lo muestra en la pantalla de login
         error = result.error;
       }
     } catch (err) {
@@ -37,7 +33,6 @@
     <div class="header">
       <h2>Panel de Control - Acceso</h2>
     </div>
-    <!-- Se usa 'on:submit' para Svelte 4 -->
     <form class="login-form" on:submit={handleLogin}>
       <div class="logo-header">
         <img

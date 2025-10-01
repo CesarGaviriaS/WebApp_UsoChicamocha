@@ -3,7 +3,7 @@ import { jwtDecode } from "jwt-decode";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Helper function to manage tokens and user data in one place
+// Helper function to manage tokens and user data
 function setSession(accessToken, refreshToken, decodedPayload) {
   const userRole = (decodedPayload.role || '').replace(/[\[\]']+/g, '').replace('ROLE_', '');
   
@@ -32,7 +32,6 @@ function createAuthStore() {
     isRefreshing: false,
   });
 
-  // --- Refresh Token Logic ---
   async function refreshToken() {
     console.log("Intentando renovar el token de acceso...");
     const storedRefreshToken = localStorage.getItem('refreshToken');
@@ -98,6 +97,14 @@ function createAuthStore() {
         const newRefreshToken = data.refreshToken;
         const decodedPayload = jwtDecode(accessToken);
 
+        const userRole = (decodedPayload.role || '').replace(/[\[\]']+/g, '').replace('ROLE_', '');
+
+        // Only allow ADMINISTRADOR and SUPERVISOR roles to log in
+        const allowedRoles = ['Administrador', 'Supervisor'];
+        if (!allowedRoles.includes(userRole)) {
+          return { success: false, error: 'Acceso denegado' };
+        }
+
         const currentUser = setSession(accessToken, newRefreshToken, decodedPayload);
         set({ isAuthenticated: true, currentUser, isRefreshing: false });
 
@@ -112,31 +119,34 @@ function createAuthStore() {
       set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
     },
     checkAuth: async () => {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
-        return false;
-      }
-
-      try {
-        const decodedPayload = jwtDecode(token);
-        const isExpired = decodedPayload.exp * 1000 < Date.now();
-
-        if (isExpired) {
-          update(store => ({ ...store, isRefreshing: true }));
-          console.log("Token de acceso expirado, intentando renovar...");
-          return await refreshToken();
+        const token = localStorage.getItem('accessToken');
+        console.log('checkAuth: token present:', !!token);
+        if (!token) {
+            set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
+            return false;
         }
-        
-        const userRole = localStorage.getItem('userRole');
-        set({ isAuthenticated: true, currentUser: { name: decodedPayload.sub, role: userRole }, isRefreshing: false });
-        return true;
 
-      } catch (error) {
-        clearSession();
-        set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
-        return false;
-      }
+        try {
+            const decodedPayload = jwtDecode(token);
+            const isExpired = decodedPayload.exp * 1000 < Date.now();
+            console.log('checkAuth: token expired:', isExpired);
+
+            if (isExpired) {
+                update(store => ({ ...store, isRefreshing: true }));
+                console.log("Token de acceso expirado, intentando renovar...");
+                return await refreshToken();
+            }
+
+            const userRole = localStorage.getItem('userRole');
+            set({ isAuthenticated: true, currentUser: { name: decodedPayload.sub, role: userRole }, isRefreshing: false });
+            return true;
+
+        } catch (error) {
+            console.log('checkAuth: error decoding token:', error);
+            clearSession();
+            set({ isAuthenticated: false, currentUser: null, isRefreshing: false });
+            return false;
+        }
     },
     // Expose the refreshToken function in case it needs to be called manually
     // or from an API interceptor in the future.

@@ -1,123 +1,175 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import fetchWithAuth from './api';
-
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 function createDataStore() {
-  const { subscribe, update } = writable({
-    dashboardData: [],
-    users: [],
-    machines: [],
-    inspections: [],
-    workOrders: [],
-    isLoading: false,
-    error: null
-  });
+    const { subscribe, update } = writable({
+        dashboard: { data: [], totalPages: 0, totalElements: 0, currentPage: 0, pageSize: 20 },
+        users: [],
+        machines: [],
+        oils: [],
+        workOrders: { data: [], totalPages: 0, totalElements: 0, currentPage: 0, pageSize: 20 },
+        consolidated: { distrito: [], asociacion: [] },
+        isLoading: false,
+        error: null
+    });
 
-   async function fetchGeneric(key, endpoint) {
-    update(store => ({ ...store, isLoading: true, error: null }));
-    try {
-      let result = await fetchWithAuth(endpoint);
-      console.log(`API response for ${endpoint}:`, result);
-      
-      let dataToStore = result;
+    const setLoading = (isLoading) => update(s => ({ ...s, isLoading }));
+    const setError = (error) => update(s => ({ ...s, error, isLoading: false }));
 
-      if (result && typeof result === 'object' && !Array.isArray(result) && result.hasOwnProperty(key)) {
-        dataToStore = result[key];
-      }
-
-      update(store => ({ ...store, [key]: dataToStore, isLoading: false }));
-      return dataToStore;
-    } catch (err) {
-      console.error(`Error fetching ${endpoint}:`, err);
-      update(store => ({ ...store, error: err.message, isLoading: false }));
-      throw err;
+    async function fetchAll(key, endpoint) {
+        setLoading(true);
+        try {
+            const result = await fetchWithAuth(endpoint);
+            const dataToStore = result?.content ?? result?.users ?? result;
+            update(s => ({ ...s, [key]: dataToStore, isLoading: false, error: null }));
+            return dataToStore;
+        } catch (err) {
+            setError(err.message);
+            throw err;
+        }
     }
-  }
 
-  return {
-    subscribe,
-    fetchDashboardData: () => fetchGeneric('dashboardData', 'inspection'),
- 
-    fetchUsers: () => fetchGeneric('users', 'user'),
-    createUser: async (newUser) => {
-      const createdUser = await fetchWithAuth('user', { method: 'POST', body: JSON.stringify(newUser) });
-      update(store => ({ ...store, users: [...store.users, createdUser] }));
-    },
-    updateUser: async (userId, userData) => {
-        const updatedUser = await fetchWithAuth(`user/${userId}`, { method: 'PUT', body: JSON.stringify(userData) });
-        update(store => ({
-            ...store,
-            users: store.users.map(u => u.id === userId ? updatedUser : u)
-        }));
-    },
-    deleteUser: async (userId) => {
-      await fetchWithAuth(`user/${userId}`, { method: 'DELETE' });
-      update(store => ({
-        ...store,
-        users: store.users.filter(u => u.id !== userId)
-      }));
-    },
-    changeUserPassword: async (userId, newPassword) => {
-      await fetchWithAuth('user/change-password', {
-        method: 'PUT',
-        body: JSON.stringify({ id: userId, newPassword })
-      });
-    },
-    toggleUserStatus: async (user) => {
-      const payload = { ...user, status: !user.status };
-      const updatedUserFromServer = await fetchWithAuth(`user/${user.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-      update(store => ({
-        ...store,
-        users: store.users.map(u => u.id === user.id ? updatedUserFromServer : u)
-      }));
-    },
-    
-    fetchMachines: () => fetchGeneric('machines', 'machine'),
-    createMachine: async (newMachine) => {
-      const createdMachine = await fetchWithAuth('machine', { method: 'POST', body: JSON.stringify(newMachine) });
-      update(store => ({ ...store, machines: [...store.machines, createdMachine] }));
-    },
-    updateMachine: async (machine) => {
-      const updatedMachine = await fetchWithAuth(`machine/${machine.id}`, { method: 'PUT', body: JSON.stringify(machine) });
-      update(store => ({
-          ...store,
-          machines: store.machines.map(m => m.id === machine.id ? updatedMachine : m)
-      }));
-    },
-    deleteMachine: async (machineId) => {
-      await fetchWithAuth(`machine/${machineId}`, { method: 'DELETE' });
-      update(store => ({
-          ...store,
-          machines: store.machines.filter(m => m.id !== machineId)
-      }));
-    },
+    async function fetchPaginated(key, endpoint, page, size) {
+        setLoading(true);
+        try {
+            const result = await fetchWithAuth(`${endpoint}?page=${page}&size=${size}`);
+            const paginatedData = {
+                data: result.content, totalPages: result.totalPages, totalElements: result.totalElements,
+                currentPage: result.number, pageSize: result.size
+            };
+            update(s => ({ ...s, [key]: paginatedData, isLoading: false, error: null }));
+            return paginatedData;
+        } catch (err) {
+            setError(err.message);
+            throw err;
+        }
+    }
 
-    fetchInspections: () => fetchGeneric('inspections', 'inspection'),
-    createInspection: async (newInspection) => {
-      const serverInspection = await fetchWithAuth('inspection', { method: 'POST', body: JSON.stringify(newInspection) });
-      update(store => ({ ...store, inspections: [...store.inspections, serverInspection] }));
-    },
-    updateInspection: async (inspectionId, inspectionData) => {
-      const serverInspection = await fetchWithAuth(`inspection/${inspectionId}`, { method: 'PUT', body: JSON.stringify(inspectionData) });
-      update(store => ({
-          ...store,
-          inspections: store.inspections.map(i => i.id === inspectionId ? serverInspection : i)
-      }));
-    },
-    deleteInspection: async (inspectionId) => {
-      await fetchWithAuth(`inspection/${inspectionId}`, { method: 'DELETE' });
-      update(store => ({
-          ...store,
-          inspections: store.inspections.filter(i => i.id !== inspectionId)
-      }));
-    },
+    const actions = {
+        // Dashboard
+        fetchDashboardData: (page = 0, size = 20) => fetchPaginated('dashboard', 'inspection', page, size),
+        fetchInspectionImages: async (inspectionId) => {
+            try {
+                // 1. Llama a la API con auth
+                const images = await fetchWithAuth(`inspection/${inspectionId}/images`);
 
-    fetchWorkOrders: () => fetchGeneric('workOrders', 'order/all'),
-    createWorkOrder: async (newWorkOrder) => {
-      console.log('Enviando payload para crear orden:', JSON.stringify(newWorkOrder, null, 2));
-      const createdWorkOrder = await fetchWithAuth('order', { method: 'POST', body: JSON.stringify(newWorkOrder) });
-      update(store => ({ ...store, workOrders: [...store.workOrders, createdWorkOrder] }));
-    },
-  };
+                if (!images || !Array.isArray(images)) {
+                    return []; // Devuelve un array vacío si no hay imágenes
+                }
+
+                // 2. Transforma el array para construir la URL completa
+                const imagesWithFullUrl = images.map(image => ({
+                    ...image, // Mantiene otras propiedades que pueda tener el objeto (id, name, etc.)
+                    // Concatena la URL base con la URL relativa de la imagen.
+                    // Normaliza para evitar doble slash
+                    url: `${BASE_URL.replace(/\/$/, '')}/${image.url.replace(/^\//, '')}`
+                }));
+
+                // 3. Devuelve el nuevo array con las URLs completas
+                return imagesWithFullUrl;
+
+            } catch (err) {
+                console.error("Error fetching or processing inspection images:", err);
+                throw err;
+            }
+        },
+        // Usuarios
+        fetchUsers: () => fetchAll('users', 'user'),
+        createUser: async (newUser) => {
+            const createdUser = await fetchWithAuth('user', { method: 'POST', body: JSON.stringify(newUser) });
+            update(s => ({ ...s, users: [...s.users, createdUser] }));
+        },
+        updateUser: async (userId, userData) => {
+            const userToUpdate = get({ subscribe }).users.find(u => u.id === userId);
+            if (!userToUpdate) throw new Error("Usuario no encontrado");
+            const payload = { id: userId, ...userToUpdate, ...userData };
+            const updatedUser = await fetchWithAuth(`user/${userId}`, { method: 'PUT', body: JSON.stringify(payload) });
+            update(s => ({ ...s, users: s.users.map(u => (u.id === userId ? updatedUser : u)) }));
+        },
+        deleteUser: async (userId) => {
+            await fetchWithAuth(`user/${userId}`, { method: 'DELETE' });
+            update(s => ({ ...s, users: s.users.filter(u => u.id !== userId) }));
+        },
+        changeUserPassword: async (userId, newPassword) => {
+            await fetchWithAuth(`user/${userId}/change-password`, {
+                method: 'PATCH',
+                body: JSON.stringify({ id: userId, newPassword: newPassword })
+            });
+        },
+        // Máquinas y Currículum
+        fetchMachines: () => fetchAll('machines', 'machine'),
+        createMachine: async (newMachine) => {
+            const createdMachine = await fetchWithAuth('machine', { method: 'POST', body: JSON.stringify(newMachine) });
+            update(s => ({ ...s, machines: [...s.machines, createdMachine] }));
+        },
+        updateMachine: async (machineData) => {
+            const updatedMachine = await fetchWithAuth(`machine/${machineData.id}`, { method: 'PUT', body: JSON.stringify(machineData) });
+            update(s => ({ ...s, machines: s.machines.map(m => m.id === machineData.id ? updatedMachine : m) }));
+        },
+        deleteMachine: async (machineId) => {
+            await fetchWithAuth(`machine/${machineId}`, { method: 'DELETE' });
+            update(s => ({ ...s, machines: s.machines.filter(m => m.id !== machineId) }));
+        },
+        fetchMachineCurriculum: async (machineId) => {
+            setLoading(true);
+            try {
+                const result = await fetchWithAuth(`curriculum/${machineId}`);
+                setLoading(false);
+                return result;
+            } catch (err) {
+                setError(err.message);
+                throw err;
+            }
+        },
+        // Órdenes de Trabajo
+        fetchWorkOrders: (page = 0, size = 20) => fetchPaginated('workOrders', 'order/all', page, size),
+        createWorkOrder: async (newWorkOrder) => {
+            await fetchWithAuth('order', { method: 'POST', body: JSON.stringify(newWorkOrder) });
+            const currentState = get({ subscribe });
+            actions.fetchWorkOrders(currentState.workOrders.currentPage, currentState.workOrders.pageSize);
+        },
+        executeWorkOrder: async (executionData) => {
+            await fetchWithAuth('results/execute', { method: 'POST', body: JSON.stringify(executionData) });
+            const currentState = get({ subscribe });
+            actions.fetchWorkOrders(currentState.workOrders.currentPage, currentState.workOrders.pageSize);
+        },
+        // Consolidado
+        fetchConsolidadoData: async () => {
+            setLoading(true);
+            try {
+                const result = await fetchWithAuth('oil-changes/consolidated', { version: null });
+                const dataToStore = result?.content ?? result;
+                const consolidatedData = {
+                    distrito: dataToStore.filter(item => item.machine.belongsTo.toLowerCase() === 'distrito'),
+                    asociacion: dataToStore.filter(item => item.machine.belongsTo.toLowerCase() === 'asociacion')
+                };
+                update(s => ({ ...s, consolidated: consolidatedData, isLoading: false, error: null }));
+                return consolidatedData;
+            } catch (err) {
+                setError(err.message);
+                throw err;
+            }
+        },
+        // Aceites
+        fetchOils: () => fetchAll('oils', 'oil/brand'),
+        createOil: async (newOil) => {
+            const createdOil = await fetchWithAuth('oil/brand', { method: 'POST', body: JSON.stringify(newOil) });
+            update(s => ({ ...s, oils: [...s.oils, createdOil] }));
+        },
+        updateOil: async (id, oilData) => {
+            const updatedOil = await fetchWithAuth(`oil/brand/${id}`, { method: 'PUT', body: JSON.stringify(oilData) });
+            update(s => ({ ...s, oils: s.oils.map(o => (o.id === id ? updatedOil : o)) }));
+        },
+        deleteOil: async (id) => {
+            await fetchWithAuth(`oil/brand/${id}`, { method: 'DELETE' });
+            update(s => ({ ...s, oils: s.oils.filter(o => o.id !== id) }));
+        }
+    };
+
+    return {
+        subscribe,
+        ...actions
+    };
 }
 
 export const data = createDataStore();
