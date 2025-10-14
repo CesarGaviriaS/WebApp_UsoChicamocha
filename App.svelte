@@ -656,7 +656,6 @@ function handleGridAction(event) {
     flex: 1;
     display: flex;
     flex-direction: column;
-    margin-left: 60px;
     transition: margin-left 0.3s ease;
     min-width: 0;
   }

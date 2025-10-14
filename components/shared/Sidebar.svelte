@@ -14,6 +14,7 @@
   <!-- Botón de Dashboard -->
   <button
     class="nav-item"
+    data-view="dashboard"
     on:click={() => navigate("dashboard")}
     class:active={activeView === "dashboard"}
     title="Dashboard"
@@ -27,6 +28,7 @@
   <!-- Botón de Usuarios -->
   <button
     class="nav-item"
+    data-view="users"
     on:click={() => navigate("users")}
     class:active={activeView === "users"}
     title="Gestionar Usuarios"
@@ -42,6 +44,7 @@
   <!-- Botón de Máquinas -->
   <button
     class="nav-item"
+    data-view="machines"
     on:click={() => navigate("machines")}
     class:active={activeView === "machines"}
     title="Gestionar Máquinas"
@@ -57,6 +60,7 @@
   <!-- Botón de Órdenes de Trabajo -->
   <button
     class="nav-item"
+    data-view="work-orders"
     on:click={() => navigate("work-orders")}
     class:active={activeView === "work-orders"}
     title="Órdenes de Trabajo"
@@ -72,6 +76,7 @@
   <!-- Botón de Consolidado -->
   <button
     class="nav-item"
+    data-view="consolidado"
     on:click={() => navigate("consolidado")}
     class:active={activeView === "consolidado"}
     title="Consolidado"
@@ -100,10 +105,7 @@
 
 <style>
   .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
+    height: 100%;
     width: 60px;
     background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 100%);
     border-right: 2px outset #c0c0c0;
@@ -112,7 +114,6 @@
     align-items: center;
     padding-top: 0;
     gap: 0;
-    z-index: 100;
     transition: width 0.3s ease;
     overflow: hidden;
   }
@@ -124,8 +125,8 @@
     height: 42px;
     background: linear-gradient(to bottom, #f0f0f0 0%, #d0d0d0 100%);
     border: none;
-    border-bottom: 1px solid #808080;
     border-top: 1px solid #ffffff;
+    border-bottom: 1px solid #808080;
     cursor: pointer;
     display: flex;
     justify-content: flex-start;

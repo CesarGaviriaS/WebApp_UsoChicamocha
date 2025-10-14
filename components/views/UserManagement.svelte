@@ -32,7 +32,7 @@
   let isSubmitting = false;
   let errorMessage = "";
   const initialUserState = {
-    username: "", email: "", fullName: "", password: "", role: "Mecanico",
+    username: "", email: "", fullName: "", password: "", role: "MECANIC",
   };
   let newUser = { ...initialUserState };
 
@@ -179,9 +179,8 @@
       </div>
       
       <select bind:value={newUser.role} required disabled={isSubmitting}>
-        <option value="Supervisor">Supervisor</option>
-        <option value="Mecanico">Mecánico</option>
-        <option value="Administrador">Administrador</option>
+        <option value="ADMIN">ADMIN</option>
+        <option value="MECANIC">MECANIC</option>
       </select>
       <button type="submit" class="btn-create" disabled={isSubmitting}>
         {isSubmitting ? "Creando..." : "Crear"}
