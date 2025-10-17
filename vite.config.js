@@ -3,6 +3,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 export default defineConfig({
   plugins: [svelte()],
+  server: {
+    allowedHosts: ['dongavo.duckdns.org', 'otro-host.com'], // Agrega tus hosts permitidos aquí
+  },
   test: {
     globals: true,
     environment: 'jsdom',
