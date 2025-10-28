@@ -357,6 +357,7 @@
   .data-grid th,
   .data-grid td {
     border: 1px solid #c0c0c0;
+    border-left: none;
     padding: 6px 8px;
     text-align: left;
     background-color: #ffffff;
@@ -376,6 +377,7 @@
     background: #c0c0c0;
     font-weight: bold;
     border: 1px outset #303030;
+    border-left: none;
     text-align: center;
     vertical-align: middle;
   }

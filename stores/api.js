@@ -37,9 +37,9 @@ async function fetchWithAuth(endpoint, options = {}) {
     if (!response.ok) {
         try {
             const errorJson = JSON.parse(responseText);
-            throw new Error(errorJson.message || responseText);
+            throw { status: response.status, message: errorJson.message || responseText };
         } catch (e) {
-            throw new Error(responseText || `Error ${response.status}: ${response.statusText}`);
+            throw { status: response.status, message: responseText || `Error ${response.status}: ${response.statusText}` };
         }
     }
 

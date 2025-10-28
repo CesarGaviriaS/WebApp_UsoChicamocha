@@ -10,7 +10,7 @@
   let description = '';
 
   let labor = {
-    price: '',
+    price: '0',
     sameMecanic: true,
     contractor: '',
     observations: ''
@@ -24,9 +24,8 @@
   $: isFormValid = (
     timeSpent.trim() !== '' &&
     description.trim() !== '' &&
-    labor.contractor.trim() !== '' &&
+    (labor.sameMecanic || labor.contractor.trim() !== '') &&
     labor.price !== '' && Number(labor.price) >= 0 &&
-    labor.observations.trim() !== '' &&
     spareParts.every(p =>
       p.ref.trim() !== '' &&
       p.name.trim() !== '' &&
@@ -116,15 +115,15 @@
   <fieldset class="form-section">
     <legend>Mano de Obra</legend>
     <div class="form-grid">
-      <label>Contratista: <input type="text" bind:value={labor.contractor} required /></label>
+      <label>Contratista: <input type="text" bind:value={labor.contractor} disabled={labor.sameMecanic} /></label>
       <label>Precio: <input type="number" min="0" bind:value={labor.price} required /></label>
     </div>
     <label class="checkbox-label">
-      <input type="checkbox" bind:checked={labor.sameMecanic} />
+      <input type="checkbox" bind:checked={labor.sameMecanic} on:change={() => { if (labor.sameMecanic) labor.contractor = ''; }} />
       El arreglo fue realizado por el mismo mecánico que reportó
     </label>
     <label>Observaciones de Mano de Obra:</label>
-    <textarea bind:value={labor.observations} rows="2" required></textarea>
+    <textarea bind:value={labor.observations} rows="2"></textarea>
   </fieldset>
 
   <fieldset class="form-section">
@@ -141,7 +140,7 @@
           <label>Referencia: <input type="text" bind:value={part.ref} required /></label>
           <label>Nombre: <input type="text" bind:value={part.name} required /></label>
           <label>Cantidad: <input type="number" min="1" bind:value={part.quantity} required /></label>
-          <label>Precio: <input type="number" min="0" bind:value={part.price} required /></label>
+          <label>Precio total: <input type="number" min="0" bind:value={part.price} required /></label>
         </div>
       </div>
     {/each}

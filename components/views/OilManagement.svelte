@@ -1,6 +1,7 @@
 <script>
-  import { data as dataStore } from '../../stores/data.js'; 
+  import { data as dataStore } from '../../stores/data.js';
   import DataGrid from '../shared/DataGrid.svelte';
+  import Loader from '../shared/Loader.svelte';
 
   let oilHydraulic = [], oilMotor = [];
   $: {
@@ -11,7 +12,7 @@
 
   let isLoading = $dataStore.isLoading;
   $: isLoading = $dataStore.isLoading;
-  
+
   let formError = '', modalError = '';
   $: serverError = $dataStore.error || '';
 
@@ -55,6 +56,7 @@
     showDeleteModal = false;
     selectedOil = null;
   }
+
   
   function handleGridAction(event) {
     const { type, data } = event.detail;
@@ -88,6 +90,14 @@
   .btn:active { border-style: inset; }
   .error { color: red; margin-top: 1rem; font-weight: bold; }
   .table-title { margin-top: 2rem; margin-bottom: 0.5rem; font-size: 14px; }
+  .loader-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    gap: 16px;
+  }
 
   .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
   .modal-content { background: #e0e0e0; padding: 20px; border: 2px outset #c0c0c0; min-width: 400px; }
@@ -117,6 +127,13 @@
   }
   .btn-refresh:hover {
     background: linear-gradient(to bottom, #f0f0f0 0%, #d0d0d0 100%);
+  }
+  .tables-container {
+    display: flex;
+    gap: 2rem;
+  }
+  .table-section {
+    flex: 1;
   }
 </style>
 
@@ -156,14 +173,22 @@
 {/if}
 
 <!-- Tablas de Datos -->
-{#if isLoading && !oilHydraulic.length && !oilMotor.length}
-  <div>Cargando aceites...</div>
+{#if isLoading}
+  <div class="loader-container">
+    <Loader />
+    <p>Cargando aceites...</p>
+  </div>
 {:else}
-  <h3 class="table-title">Aceites Hidráulicos</h3>
-  <DataGrid {columns} data={oilHydraulic} on:action={handleGridAction} />
-
-  <h3 class="table-title">Aceites de Motor</h3>
-  <DataGrid {columns} data={oilMotor} on:action={handleGridAction} />
+  <div class="tables-container">
+    <div class="table-section">
+      <h3 class="table-title">Aceites Hidráulicos</h3>
+      <DataGrid {columns} data={oilHydraulic} on:action={handleGridAction} />
+    </div>
+    <div class="table-section">
+      <h3 class="table-title">Aceites de Motor</h3>
+      <DataGrid {columns} data={oilMotor} on:action={handleGridAction} />
+    </div>
+  </div>
 {/if}
 
 

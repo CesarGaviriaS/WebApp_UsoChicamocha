@@ -55,7 +55,11 @@
       await data.createUser(newUser);
       newUser = { ...initialUserState };
     } catch (e) {
-      errorMessage = e.message || "Error al crear usuario.";
+      if (e.status === 500) {
+        errorMessage = "Algo salió mal. Pruebe usando un nombre de usuario diferente. Recuerde que los nombres de usuario no pueden repetirse por seguridad en toda la historia de la app";
+      } else {
+        errorMessage = e.message || "Error al crear usuario.";
+      }
     } finally {
       isSubmitting = false;
     }
@@ -133,9 +137,10 @@
   }
 </script>
 
-{#if isLoading && users.length === 0}
+{#if isLoading}
   <div class="loader-container">
     <Loader />
+    <p>Cargando usuarios...</p>
   </div>
 {:else}
 <div class="management-container">
@@ -186,6 +191,9 @@
         {isSubmitting ? "Creando..." : "Crear"}
       </button>
     </form>
+    {#if errorMessage}
+      <p class="error-message">{errorMessage}</p>
+    {/if}
   </div>
 
   <div class="table-wrapper">

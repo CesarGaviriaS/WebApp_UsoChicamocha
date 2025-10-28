@@ -26,9 +26,10 @@
   
 </script>
 
-{#if isLoading && dashboardInfo.data.length === 0}
+{#if isLoading}
   <div class="loader-container">
     <Loader />
+    <p>Cargando inspecciones...</p>
   </div>
 {:else}
   <div class="refresh-container">

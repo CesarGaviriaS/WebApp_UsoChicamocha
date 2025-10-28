@@ -7,12 +7,14 @@
     curriculumColumns,
   } from "../../config/table-definitions.js";
   import { onDestroy } from 'svelte';
+  import { addNotification } from '../../stores/ui.js';
 
   let isDeleteMachineEnabled = false;
   let deleteMachineTimer;
 
   let isSubmitting = false;
   let errorMessage = "";
+  let isExporting = false;
 
   const initialMachineState = {
     name: "",
@@ -135,17 +137,57 @@
     machineToDelete = null;
     clearTimeout(deleteMachineTimer);
   }
+
+  async function handleExportCurriculum() {
+    isExporting = true;
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/curriculum/export`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al descargar el archivo');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'curriculum.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      addNotification({ id: Date.now(), text: 'Archivo de curriculum descargado con éxito.' });
+    } catch (e) {
+      addNotification({ id: Date.now(), text: `Error al descargar el archivo: ${e.message}` });
+    } finally {
+      isExporting = false;
+    }
+  }
+
 </script>
 
-{#if isLoading && machines.length === 0}
+{#if isLoading}
   <div class="loader-container">
     <Loader />
+    <p>Cargando máquinas...</p>
   </div>
 {:else}
   <div class="management-container">
     <div class="refresh-container">
       <button class="btn-refresh" on:click={() => data.fetchMachines()}>
         Refrescar información
+      </button>
+      <button class="btn-export" on:click={handleExportCurriculum} disabled={isExporting}>
+        {#if isExporting}
+          <span class="loading-icon">⟳</span>
+        {/if}
+        {isExporting ? 'Descargando...' : 'Exportar Excel'}
       </button>
     </div>
     <div class="form-container">
@@ -367,6 +409,7 @@
   .refresh-container {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
     margin-bottom: 8px;
   }
   .btn-refresh {
@@ -379,6 +422,31 @@
   }
   .btn-refresh:hover {
     background: linear-gradient(to bottom, #f0f0f0 0%, #d0d0d0 100%);
+  }
+  .btn-export {
+    padding: 2px 8px;
+    background: linear-gradient(to bottom, #90ee90 0%, #7bc97b 100%);
+    border: 1px outset #7bc97b;
+    cursor: pointer;
+    font-size: 10px;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .btn-export:hover:not(:disabled) {
+    background: linear-gradient(to bottom, #a0ffa0 0%, #8bd98b 100%);
+  }
+  .btn-export:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  .loading-icon {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   .table-wrapper {
     flex: 1;
