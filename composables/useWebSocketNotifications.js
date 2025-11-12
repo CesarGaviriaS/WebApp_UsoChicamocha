@@ -71,14 +71,11 @@ function buildWebSocketUrl() {
   const BASE_URL = import.meta.env.VITE_API_BASE_URL;
   
   // Use the backend URL from environment variables
+  // SockJS expects HTTP/HTTPS URLs (not ws:// or wss://)
   const baseUrl = BASE_URL.replace(/\/$/, ''); // Remove trailing slash
   const wsPath = '/ws';
   
-  // Convert HTTPS/HTTP to WSS/WS for WebSocket protocol
-  const protocol = baseUrl.startsWith('https:') ? 'wss:' : 'ws:';
-  const host = baseUrl.replace(/^https?:\/\//, '');
-  
-  return `${protocol}//${host}${wsPath}`;
+  return `${baseUrl}${wsPath}`;
 }
 
 // Initialize WebSocket notifications with SockJS + STOMP
