@@ -1,0 +1,428 @@
+import { writable } from 'svelte/store';
+import { get } from 'svelte/store';
+import { EventSourcePolyfill } from 'event-source-polyfill';
+import { auth } from '../stores/auth.js';
+import { data } from '../stores/data.js';
+import { ui, addNotification, notificationMessages, notificationCount } from '../stores/ui.js';
+
+// Notification types
+export const NOTIFICATION_TYPES = {
+  INSPECTION: 'inspection',
+  DATA_UPDATE: 'data-update',
+  SOAT_RUNT: 'soat-runt',
+  OIL_CHANGE: 'oil-change'
+};
+
+// Notification service store
+export const notificationService = writable({
+  isConnected: false,
+  connection: null,
+  type: null,
+  isReconnecting: false
+});
+
+// Active notification streams - PERSISTENT (never close)
+let inspectionStream = null;
+let dataUpdateStream = null;
+let soatRuntStream = null;
+let oilChangeStream = null;
+
+// Base URL from environment
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+// Audio context for notification sounds
+let audioCtx = null;
+let soundNeedsActivation = true;
+
+export function initializeNotifications() {
+  const token = localStorage.getItem('accessToken');
+  
+  console.log("🔔 [NOTIFICATIONS] === INICIO DE INICIALIZACIÓN (PERSISTENTE) ===", new Date().toLocaleTimeString());
+  console.log("🔔 [NOTIFICATIONS] Token disponible:", token ? "SÍ" : "NO");
+  console.log("🔔 [NOTIFICATIONS] Base URL disponible:", BASE_URL ? "SÍ" : "NO");
+  console.log("🔔 [NOTIFICATIONS] Auth state:", get(auth).isAuthenticated);
+  console.log("🔔 [NOTIFICATIONS] IMPORTANTE: STREAMS NUNCA SE CIERRAN");
+  
+  if (!BASE_URL || !token) {
+    console.warn("❌ [NOTIFICATIONS] No se puede inicializar notificaciones: falta la URL base o el token.");
+    console.log("🔔 [NOTIFICATIONS] BASE_URL:", BASE_URL);
+    console.log("🔔 [NOTIFICATIONS] token:", token ? "presente" : "ausente");
+    return;
+  }
+
+  console.log("🔔 [NOTIFICATIONS] Conectando a todos los streams (PERSISTENTES)...");
+  connectToAllStreams(token);
+  console.log("🔔 [NOTIFICATIONS] Activando sonido...");
+  activateSound();
+  console.log("🔔 [NOTIFICATIONS] === INICIALIZACIÓN COMPLETA - STREAMS ACTIVOS ===");
+}
+
+function connectToAllStreams(token) {
+  console.log("🔔 [NOTIFICATIONS] Iniciando conexiones de streams PERSISTENTES...");
+  
+  // Connect to inspection notifications
+  console.log("🔔 [NOTIFICATIONS] → Conectando stream de INSPECCIONES (PERSISTENTE)...");
+  connectInspectionStream(token);
+  
+  // Connect to data updates  
+  console.log("🔔 [NOTIFICATIONS] → Conectando stream de ACTUALIZACIÓN DE DATOS (PERSISTENTE)...");
+  connectDataUpdateStream(token);
+  
+  // Connect to SOAT/RUNT notifications
+  console.log("🔔 [NOTIFICATIONS] → Conectando stream SOAT/RUNT (PERSISTENTE)...");
+  connectSoatRuntStream(token);
+  
+  // Connect to oil change notifications
+  console.log("🔔 [NOTIFICATIONS] → Conectando stream de CAMBIOS DE ACEITE (PERSISTENTE)...");
+  connectOilChangeStream(token);
+  
+  console.log("🔔 [NOTIFICATIONS] Todas las conexiones de streams PERSISTENTES iniciadas.");
+}
+
+function connectInspectionStream(token) {
+  const streamUrl = `${BASE_URL}/inspections/stream?token=${encodeURIComponent(token)}`;
+  console.log("🔔 [INSPECTION] Creando EventSource PERSISTENTE para:", streamUrl);
+  
+  inspectionStream = new EventSourcePolyfill(streamUrl);
+  
+  inspectionStream.onopen = () => {
+    console.log("✅ [INSPECTION] Conectado al stream de inspecciones (PERSISTENTE).", new Date().toLocaleTimeString());
+    updateConnectionStatus(NOTIFICATION_TYPES.INSPECTION, true);
+  };
+  
+  inspectionStream.onmessage = (event) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log("📨 [INSPECTION] Mensaje recibido en", timestamp);
+    console.log("📨 [INSPECTION] Raw data:", event.data);
+    
+    const message = event.data;
+    if (message === 'stream_open') {
+      console.log('✅ [INSPECTION] Notificaciones de inspecciones confirmadas.');
+      return;
+    }
+    
+    try {
+      console.log("🔍 [INSPECTION] Procesando mensaje JSON...");
+      const newInspection = JSON.parse(event.data);
+      console.log("🔍 [INSPECTION] Inspection parseada:", newInspection);
+      
+      const machineInfo = newInspection.machine ? 
+        `${newInspection.machine.name} ${newInspection.machine.model}` : 
+        'una máquina';
+      
+      console.log("🔔 [INSPECTION] Agregando notificación:", `¡IMPREVISTO EN ${machineInfo}!`);
+
+      addNotification({
+        id: newInspection.UUID || Date.now(),
+        text: `¡IMPREVISTO EN ${machineInfo}!`
+      });
+
+      console.log("🔊 [INSPECTION] Reproduciendo sonido...");
+      playNotificationSound();
+
+      // Auto-refresh dashboard if on inspection view
+      const currentView = get(ui).currentView;
+      console.log("🔄 [INSPECTION] Vista actual:", currentView);
+      
+      if (currentView === 'dashboard') {
+        console.log("🔄 [INSPECTION] Actualizando dashboard...");
+        const dataState = get(data);
+        console.log("🔄 [INSPECTION] Estado de datos:", dataState.dashboard);
+        data.fetchDashboardData(dataState.dashboard.currentPage, dataState.dashboard.pageSize);
+      }
+    } catch (e) {
+      console.error("❌ [INSPECTION] Error procesando mensaje:", e.message);
+      console.error("❌ [INSPECTION] Mensaje que causó error:", event.data);
+    }
+  };
+  
+  inspectionStream.onerror = (err) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.warn("⚠️ [INSPECTION] Error temporal en stream en", timestamp, err);
+    console.log("⚠️ [INSPECTION] STREAM MANTIENE CONEXIÓN - NO SE CIERRA");
+    console.log("⚠️ [INSPECTION] El stream continúa escuchando...");
+    // NO SE CIERRA EL STREAM - SE MANTIENE ACTIVO
+  };
+}
+
+function connectDataUpdateStream(token) {
+  const streamUrl = `${BASE_URL}/new-data/notifications/stream?token=${encodeURIComponent(token)}`;
+  console.log("🔔 [DATA_UPDATE] Creando EventSource PERSISTENTE para:", streamUrl);
+  
+  dataUpdateStream = new EventSourcePolyfill(streamUrl);
+  
+  dataUpdateStream.onopen = () => {
+    console.log("✅ [DATA_UPDATE] Conectado al stream de actualización de datos (PERSISTENTE).", new Date().toLocaleTimeString());
+    updateConnectionStatus(NOTIFICATION_TYPES.DATA_UPDATE, true);
+  };
+  
+  dataUpdateStream.onmessage = (event) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log("📨 [DATA_UPDATE] Mensaje recibido en", timestamp);
+    console.log("📨 [DATA_UPDATE] Raw data:", event.data);
+    
+    const message = event.data;
+    if (message === 'stream_open') {
+      console.log('✅ [DATA_UPDATE] Notificaciones de actualización confirmadas.');
+      return;
+    }
+    
+    const currentView = get(ui).currentView;
+    console.log(`🔄 [DATA_UPDATE] Mensaje: "${message}", Vista actual: "${currentView}"`);
+
+    // Route data updates to appropriate refresh functions
+    handleDataUpdate(currentView, message);
+  };
+  
+  dataUpdateStream.onerror = (err) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.warn("⚠️ [DATA_UPDATE] Error temporal en stream en", timestamp, err);
+    console.log("⚠️ [DATA_UPDATE] STREAM MANTIENE CONEXIÓN - NO SE CIERRA");
+    console.log("⚠️ [DATA_UPDATE] El stream continúa escuchando...");
+    // NO SE CIERRA EL STREAM - SE MANTIENE ACTIVO
+  };
+}
+
+function connectSoatRuntStream(token) {
+  const streamUrl = `${BASE_URL}/soat/runt/notifications/stream?token=${encodeURIComponent(token)}`;
+  console.log("🔔 [SOAT_RUNT] Creando EventSource PERSISTENTE para:", streamUrl);
+  
+  soatRuntStream = new EventSourcePolyfill(streamUrl);
+  
+  soatRuntStream.onopen = () => {
+    console.log("✅ [SOAT_RUNT] Conectado al stream SOAT/RUNT (PERSISTENTE).", new Date().toLocaleTimeString());
+    updateConnectionStatus(NOTIFICATION_TYPES.SOAT_RUNT, true);
+  };
+  
+  soatRuntStream.onmessage = (event) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log("📨 [SOAT_RUNT] Mensaje recibido en", timestamp);
+    console.log("📨 [SOAT_RUNT] Raw data:", event.data);
+    
+    const message = event.data;
+    if (message === 'stream_open') {
+      console.log('✅ [SOAT_RUNT] Notificaciones SOAT/RUNT confirmadas.');
+      return;
+    }
+    
+    try {
+      console.log("🔍 [SOAT_RUNT] Procesando mensaje JSON...");
+      const notificationData = JSON.parse(event.data);
+      console.log("🔍 [SOAT_RUNT] Notification parseada:", notificationData);
+
+      console.log("🔔 [SOAT_RUNT] Agregando notificación:", notificationData.message || 'Notificación SOAT/RUNT');
+      
+      addNotification({
+        id: notificationData.id || Date.now(),
+        text: notificationData.message || 'Notificación SOAT/RUNT'
+      });
+      // No sound for this stream
+    } catch (e) {
+      console.error("❌ [SOAT_RUNT] Error procesando mensaje:", e.message);
+      console.error("❌ [SOAT_RUNT] Mensaje que causó error:", event.data);
+    }
+  };
+  
+  soatRuntStream.onerror = (err) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.warn("⚠️ [SOAT_RUNT] Error temporal en stream en", timestamp, err);
+    console.log("⚠️ [SOAT_RUNT] STREAM MANTIENE CONEXIÓN - NO SE CIERRA");
+    console.log("⚠️ [SOAT_RUNT] El stream continúa escuchando...");
+    // NO SE CIERRA EL STREAM - SE MANTIENE ACTIVO
+  };
+}
+
+function connectOilChangeStream(token) {
+  const streamUrl = `${BASE_URL}/oil_change/notifications/stream?token=${encodeURIComponent(token)}`;
+  console.log("🔔 [OIL_CHANGE] Creando EventSource PERSISTENTE para:", streamUrl);
+  
+  oilChangeStream = new EventSourcePolyfill(streamUrl);
+  
+  oilChangeStream.onopen = () => {
+    console.log("✅ [OIL_CHANGE] Conectado al stream de cambios de aceite (PERSISTENTE).", new Date().toLocaleTimeString());
+    updateConnectionStatus(NOTIFICATION_TYPES.OIL_CHANGE, true);
+  };
+  
+  oilChangeStream.onmessage = (event) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.log("📨 [OIL_CHANGE] Mensaje recibido en", timestamp);
+    console.log("📨 [OIL_CHANGE] Raw data:", event.data);
+    
+    const message = event.data;
+    if (message === 'stream_open') {
+      console.log('✅ [OIL_CHANGE] Notificaciones de cambios de aceite confirmadas.');
+      return;
+    }
+    
+    try {
+      console.log("🔍 [OIL_CHANGE] Procesando mensaje JSON...");
+      const notificationData = JSON.parse(event.data);
+      console.log("🔍 [OIL_CHANGE] Notification parseada:", notificationData);
+
+      console.log("🔔 [OIL_CHANGE] Agregando notificación:", notificationData.message || 'Notificación de cambio de aceite');
+      
+      addNotification({
+        id: notificationData.id || Date.now(),
+        text: notificationData.message || 'Notificación de cambio de aceite'
+      });
+      // No sound for this stream
+    } catch (e) {
+      console.error("❌ [OIL_CHANGE] Error procesando mensaje:", e.message);
+      console.error("❌ [OIL_CHANGE] Mensaje que causó error:", event.data);
+    }
+  };
+  
+  oilChangeStream.onerror = (err) => {
+    const timestamp = new Date().toLocaleTimeString();
+    console.warn("⚠️ [OIL_CHANGE] Error temporal en stream en", timestamp, err);
+    console.log("⚠️ [OIL_CHANGE] STREAM MANTIENE CONEXIÓN - NO SE CIERRA");
+    console.log("⚠️ [OIL_CHANGE] El stream continúa escuchando...");
+    // NO SE CIERRA EL STREAM - SE MANTIENE ACTIVO
+  };
+}
+
+function handleDataUpdate(currentView, message) {
+  console.log("🔄 [DATA_UPDATE] Manejando actualización para vista:", currentView, "mensaje:", message);
+  
+  const dataState = get(data);
+  console.log("🔄 [DATA_UPDATE] Estado actual de datos:", {
+    dashboard: dataState.dashboard?.currentPage,
+    workOrders: dataState.workOrders?.currentPage
+  });
+  
+  switch (message) {
+    case 'inspections-updated':
+      if (currentView === 'dashboard') {
+        console.log('🔄 [DATA_UPDATE] Recargando tabla de inspecciones...');
+        data.fetchDashboardData(dataState.dashboard.currentPage, dataState.dashboard.pageSize);
+      }
+      break;
+    case 'machines-updated':
+      if (currentView === 'machines') {
+        console.log('🔄 [DATA_UPDATE] Recargando tabla de máquinas...');
+        data.fetchMachines();
+      }
+      break;
+    case 'users-updated':
+      if (currentView === 'users') {
+        console.log('🔄 [DATA_UPDATE] Recargando tabla de usuarios...');
+        data.fetchUsers();
+      }
+      break;
+    case 'orders-updated':
+      if (currentView === 'work-orders') {
+        console.log('🔄 [DATA_UPDATE] Recargando tabla de órdenes de trabajo...');
+        data.fetchWorkOrders(dataState.workOrders.currentPage, dataState.workOrders.pageSize);
+      }
+      break;
+    case 'oil-changes-updated':
+      if (currentView === 'consolidado') {
+        console.log('🔄 [DATA_UPDATE] Recargando tabla de consolidado...');
+        data.fetchConsolidadoData();
+      }
+      break;
+    default:
+      console.log("⚠️ [DATA_UPDATE] Mensaje no reconocido:", message);
+  }
+}
+
+// ELIMINADO: handleStreamError - los streams NUNCA se cierran
+// ELIMINADO: reconnectStream - los streams NUNCA se reconectan
+
+function updateConnectionStatus(type, isConnected, isReconnecting = false) {
+  console.log(`📊 [CONNECTION] Estado actualizado - Tipo: ${type}, Conectado: ${isConnected}, Reconectando: ${isReconnecting}`);
+  
+  notificationService.update(state => ({
+    ...state,
+    isConnected: isConnected || state.isConnected,
+    type: isConnected ? type : state.type,
+    isReconnecting: false // SIEMPRE false - no hay reconexión
+  }));
+}
+
+// MODIFICADO: disconnectFromAllStreams - SOLO cuando el usuario hace logout explícitamente
+export function disconnectFromAllStreams() {
+  console.log("🔌 [DISCONNECT] LOGOUT - Cerrando todos los streams (solo en logout)...");
+  
+  [inspectionStream, dataUpdateStream, soatRuntStream, oilChangeStream].forEach((stream, index) => {
+    if (stream) {
+      console.log("🔌 [DISCONNECT] Cerrando stream:", index, "por logout");
+      stream.close();
+      stream = null;
+    }
+  });
+  
+  notificationService.set({
+    isConnected: false,
+    connection: null,
+    type: null,
+    isReconnecting: false
+  });
+  
+  console.log("🔌 [DISCONNECT] Todos los streams cerrados por logout.");
+}
+
+// Audio functions
+export function activateSound() {
+  console.log("🔊 [AUDIO] Activando contexto de audio...");
+  
+  if (!audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      soundNeedsActivation = false;
+      console.log("🔊 [AUDIO] Contexto de audio activado exitosamente.");
+    } catch(e) {
+      console.error("❌ [AUDIO] Web Audio API no es soportada:", e.message);
+      soundNeedsActivation = false;
+    }
+  } else {
+    console.log("🔊 [AUDIO] Contexto de audio ya existía, activándolo...");
+    soundNeedsActivation = false;
+  }
+}
+
+export function playNotificationSound() {
+  console.log("🔊 [AUDIO] Intentando reproducir sonido...");
+  
+  if (!audioCtx) {
+    console.warn("⚠️ [AUDIO] El audio debe ser activado por un gesto del usuario.");
+    return;
+  }
+  if (audioCtx.state === "suspended") {
+    console.log("🔊 [AUDIO] Reanudando contexto de audio...");
+    audioCtx.resume();
+  }
+
+  const now = audioCtx.currentTime;
+  const oscillator = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(800, now);
+  oscillator.frequency.linearRampToValueAtTime(600, now + 0.15);
+
+  gainNode.gain.setValueAtTime(0, now);
+  gainNode.gain.linearRampToValueAtTime(0.4, now + 0.02);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+  
+  console.log("🔊 [AUDIO] Sonido iniciado.");
+  
+  oscillator.start(now);
+  oscillator.stop(now + 0.25);
+  
+  console.log("🔊 [AUDIO] Sonido programado para terminar en 0.25s.");
+}
+
+export function getSoundNeedsActivation() {
+  console.log("🔊 [AUDIO] Estado de activación:", soundNeedsActivation);
+  return soundNeedsActivation;
+}
+
+export function getConnectionStatus() {
+  const status = notificationService;
+  console.log("📊 [STATUS] Obteniendo estado de conexión...");
+  return status;
+}

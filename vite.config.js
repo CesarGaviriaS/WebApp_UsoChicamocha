@@ -1,16 +1,18 @@
+// vite.config.js
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { resolve } from 'path'
 
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [svelte()],
-  server: {
-    allowedHosts: ['dongavo.duckdns.org', 'otro-host.com'], // Agrega tus hosts permitidos aquí
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
   },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    include: ['__tests__/**/*.test.js'],
-    exclude: ['e2e/**', 'node_modules/**'],
-    setupFiles: ['__tests__/setup.js'],
+  define: {
+    // Polyfill para 'global' en el navegador (para sockjs-client)
+    global: 'globalThis',
   },
 })

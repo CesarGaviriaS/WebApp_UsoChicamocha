@@ -91,8 +91,6 @@
       on:sizeChange={handleSizeChange}
     />
   </div>
-
-  
 {/if}
 
 <style>

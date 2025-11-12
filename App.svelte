@@ -16,7 +16,18 @@
   import { auth } from './stores/auth.js';
   import { ui, notificationCount, addNotification, notificationMessages, removeNotification } from './stores/ui.js';
   import { data } from './stores/data.js';
-    import ImageCarouselModal from './components/shared/ImageCarouselModal.svelte';
+  import {
+    initializeWebSocketNotifications,
+    disconnectFromWebSocket,
+    getWebSocketConnectionStatus,
+    wsNotificationService,
+    getWebSocketSoundNeedsActivation,
+    setWebSocketSoundNeedsActivation,
+    soundNeedsActivation,
+    activateSound as activateWebSocketSound,
+    playNotificationSound
+  } from './composables/useWebSocketNotifications.js';
+  import ImageCarouselModal from './components/shared/ImageCarouselModal.svelte';
 
 // --- LÓGICA DEL MODAL DE IMÁGENES ---
   let isImageModalOpen = false;
@@ -24,12 +35,23 @@
   let isImageModalLoading = false;
   // --- LOCAL STATE ---
   let showNotifications = false;
-  let inspectionEventSource;
-  let dataUpdateEventSource;
-  let soatRuntEventSource;
-  let oilChangeEventSource;
-  let audioCtx;
-  let soundNeedsActivation = true;
+  
+  // --- AUTO REFRESH STATE ---
+  let autoRefreshInterval;
+  let isAutoRefreshEnabled = true;
+  let isAutoRefreshActive = false;
+  let refreshCount = 0;
+
+  // --- SOUND ACTIVATION STATE ---
+  // Now handled via unifiedSoundActivation store from useUnifiedNotifications.js
+  
+  // --- NOTIFICATION SERVICE STATE ---
+  let connectionStatus = { isConnected: false };
+  
+  // --- UNIFIED NOTIFICATION SERVICE STATE ---
+  let activeServiceInfo = { mode: 'websocket', isConnected: false, serviceName: 'None', fallbackAttempted: false };
+  let isWebSocketPreferred = true; // WebSocket by default
+  let showServiceInfo = false; // Debug panel
 
 
   async function openImageModal(inspectionId) {
@@ -48,309 +70,111 @@
     isImageModalOpen = false;
     imageModalUrls = [];
   }
-  // --- LÓGICA DE SONIDO ---
-  function activateSound() {
-    if (!audioCtx) {
-      try {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        soundNeedsActivation = false;
-        console.log("Contexto de audio activado por el usuario.");
-      } catch(e) {
-        console.error("Web Audio API no es soportada en este navegador.");
-        soundNeedsActivation = false;
-      }
-    } else {
-        soundNeedsActivation = false;
+
+  // --- AUTO REFRESH FUNCTIONS ---
+  let lastRefreshTime = 0;
+  const MIN_REFRESH_INTERVAL = 60000; // 1 minute minimum between refreshes
+
+  function startAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
     }
-  }
-
-function playNotificationSound() {
-  if (!audioCtx) {
-    console.warn("El audio debe ser activado por un gesto del usuario.");
-    return;
-  }
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume();
-  }
-
-  const now = audioCtx.currentTime;
-  const oscillator = audioCtx.createOscillator();
-  const gainNode = audioCtx.createGain();
-
-  oscillator.connect(gainNode);
-  gainNode.connect(audioCtx.destination);
-
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(800, now);
-  oscillator.frequency.linearRampToValueAtTime(600, now + 0.15);
-
-  gainNode.gain.setValueAtTime(0, now);
-  gainNode.gain.linearRampToValueAtTime(0.4, now + 0.02);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
-  
-  oscillator.start(now);
-  oscillator.stop(now + 0.25);
-}
-
-  // --- LÓGICA DE NOTIFICACIONES EN TIEMPO REAL ---
-  function connectToInspectionStream() {
-  if (inspectionEventSource) {
-    inspectionEventSource.close();
-    inspectionEventSource = null;
-  }
-
-  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-  const token = localStorage.getItem('accessToken');
-
-  if (!BASE_URL || !token) {
-    console.warn("No se puede conectar al stream: falta la URL base o el token.");
-    return;
-  }
-  
-  const streamUrl = `${BASE_URL}/inspections/stream`;
-  
-  // 2. Usa 'EventSourcePolyfill' y pasa las cabeceras
-  inspectionEventSource = new EventSourcePolyfill(streamUrl, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
-
-  inspectionEventSource.onopen = () => console.log("✅ Conectado al stream de notificaciones de inspecciones.");
-  
-    inspectionEventSource.onmessage = (event) => {
-        const message = event.data;
-        if (message === 'stream_open') {
-          console.log('Notificaciones de inspecciones: ✅');
-          return;
-        }
+    
+    autoRefreshInterval = setInterval(async () => {
+      const now = Date.now();
+      const currentView = get(ui).currentView;
+      const dataState = get(data);
+      
+      // Only refresh if enabled, authenticated, not currently loading,
+      // and enough time has passed since last refresh
+      if (isAutoRefreshEnabled &&
+          $auth.isAuthenticated &&
+          !dataState.isLoading &&
+          (now - lastRefreshTime) >= MIN_REFRESH_INTERVAL) {
+        
+        isAutoRefreshActive = true;
+        
         try {
-          const newInspection = JSON.parse(event.data);
-          const machineInfo = newInspection.machine ? `${newInspection.machine.name} ${newInspection.machine.model}` : 'una máquina';
- 
-          addNotification({
-            id: newInspection.UUID || Date.now(),
-            text: `¡IMPREVISTO EN ${machineInfo}!`
-          });
- 
-          playNotificationSound();
- 
-          const currentView = get(ui).currentView;
-          if (currentView === 'dashboard') {
-            const dashboardState = get(data).dashboard;
-            data.fetchDashboardData(dashboardState.currentPage, dashboardState.pageSize);
-          }
-        } catch (e) {
-          console.error("Error procesando mensaje del stream:", e);
-        }
-      };
-    inspectionEventSource.onerror = (err) => {
-      console.error("Error en la conexión con el stream de inspecciones. Se cerrará la conexión.", err);
-      inspectionEventSource.close();
-    };
-  }
-  
-  function connectToDataUpdateStream() {
-  if (dataUpdateEventSource) {
-    dataUpdateEventSource.close();
-    dataUpdateEventSource = null;
-  }
-
-  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-  const token = localStorage.getItem('accessToken');
-
-  if (!BASE_URL || !token) {
-    console.warn("No se puede conectar al stream: falta la URL base o el token.");
-    return;
-  }
-  
-  const streamUrl = `${BASE_URL}/new-data/notifications/stream`;
-  
-  // 3. Haz lo mismo aquí: usa 'EventSourcePolyfill' con las cabeceras
-  dataUpdateEventSource = new EventSourcePolyfill(streamUrl, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
-  
-  dataUpdateEventSource.onopen = () => console.log("✅ Conectado al stream de actualización de datos.");
-
-    dataUpdateEventSource.onmessage = (event) => {
-        const message = event.data;
-        if (message === 'stream_open') {
-          console.log('Notificaciones de actualización: ✅');
-          return;
-        }
-        const currentView = get(ui).currentView;
-        const dataState = get(data);
-
-        console.log(`Mensaje de actualización recibido: ${message}, vista actual: ${currentView}`);
-
-        switch (message) {
-            case 'inspections-updated':
-                if (currentView === 'dashboard') {
-                    console.log('Recargando tabla de inspecciones...');
-                    data.fetchDashboardData(dataState.dashboard.currentPage, dataState.dashboard.pageSize);
-                }
-                break;
-            case 'machines-updated':
-                if (currentView === 'machines') {
-                    console.log('Recargando tabla de máquinas...');
-                    data.fetchMachines();
-                }
-                break;
-            case 'users-updated':
-                if (currentView === 'users') {
-                    console.log('Recargando tabla de usuarios...');
-                    data.fetchUsers();
-                }
-                break;
-            case 'orders-updated':
-                if (currentView === 'work-orders') {
-                    console.log('Recargando tabla de órdenes de trabajo...');
-                    data.fetchWorkOrders(dataState.workOrders.currentPage, dataState.workOrders.pageSize);
-                }
-                break;
-            case 'oil-changes-updated':
-              if (currentView === 'consolidado') {
-                console.log('Recargando tabla de consolidado...');
-                data.fetchConsolidatedData();
-              }
+          switch (currentView) {
+            case 'dashboard':
+              console.log('🔄 Auto-refrescando tabla de inspecciones...');
+              await data.fetchDashboardData(dataState.dashboard.currentPage, dataState.dashboard.pageSize);
               break;
+            case 'machines':
+              console.log('🔄 Auto-refrescando tabla de máquinas...');
+              await data.fetchMachines();
+              break;
+            case 'work-orders':
+              console.log('🔄 Auto-refrescando tabla de órdenes de trabajo...');
+              await data.fetchWorkOrders(dataState.workOrders.currentPage, dataState.workOrders.pageSize);
+              break;
+            case 'consolidado':
+              console.log('🔄 Auto-refrescando tabla de consolidado...');
+              await data.fetchConsolidadoData();
+              break;
+            case 'oilManagement':
+              console.log('🔄 Auto-refrescando tabla de aceites...');
+              await data.fetchOils();
+              break;
+            case 'users':
+              console.log('🔄 Auto-refrescando tabla de usuarios...');
+              await data.fetchUsers();
+              break;
+          }
+          lastRefreshTime = now;
+          refreshCount++;
+          console.log(`🔄 Auto-refresh #${refreshCount} completed at ${new Date().toLocaleTimeString()}`);
+        } catch (error) {
+          console.warn('Error en auto-refresh:', error.message);
+        } finally {
+          isAutoRefreshActive = false;
         }
-    };
-    dataUpdateEventSource.onerror = (err) => {
-        console.error("Error en la conexión con el stream de actualización. Se cerrará la conexión.", err);
-        dataUpdateEventSource.close();
-    };
+      }
+    }, 60000); // Check every 1 minute, refresh if 1 minute has passed
   }
 
-  function connectToSoatRuntStream() {
-    if (soatRuntEventSource) {
-      soatRuntEventSource.close();
-      soatRuntEventSource = null;
-    }
-
-    const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-    const token = localStorage.getItem('accessToken');
-
-    if (!BASE_URL || !token) {
-      console.warn("No se puede conectar al stream SOAT/RUNT: falta la URL base o el token.");
-      return;
-    }
-
-    const streamUrl = `${BASE_URL}/soat/runt/notifications/stream`;
-
-    soatRuntEventSource = new EventSourcePolyfill(streamUrl, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    soatRuntEventSource.onopen = () => console.log("✅ Conectado al stream de notificaciones SOAT/RUNT.");
-
-    soatRuntEventSource.onmessage = (event) => {
-      const message = event.data;
-      if (message === 'stream_open') {
-        console.log('Notificaciones SOAT/RUNT: ✅');
-        return;
-      }
-      try {
-        const notificationData = JSON.parse(event.data);
-        addNotification({
-          id: notificationData.id || Date.now(),
-          text: notificationData.message || 'Notificación SOAT/RUNT'
-        });
-        // No sound for this stream
-      } catch (e) {
-        console.error("Error procesando mensaje del stream SOAT/RUNT:", e);
-      }
-    };
-
-    soatRuntEventSource.onerror = (err) => {
-      console.error("Error en la conexión con el stream SOAT/RUNT. Se cerrará la conexión.", err);
-      soatRuntEventSource.close();
-    };
-  }
-
-  function connectToOilChangeStream() {
-    if (oilChangeEventSource) {
-      oilChangeEventSource.close();
-      oilChangeEventSource = null;
-    }
-
-    const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-    const token = localStorage.getItem('accessToken');
-
-    if (!BASE_URL || !token) {
-      console.warn("No se puede conectar al stream de cambios de aceite: falta la URL base o el token.");
-      return;
-    }
-
-    const streamUrl = `${BASE_URL}/oil_change/notifications/stream`;
-
-    oilChangeEventSource = new EventSourcePolyfill(streamUrl, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    oilChangeEventSource.onopen = () => console.log("✅ Conectado al stream de notificaciones de cambios de aceite.");
-
-    oilChangeEventSource.onmessage = (event) => {
-      const message = event.data;
-      if (message === 'stream_open') {
-        console.log('Notificaciones de cambios de aceite: ✅');
-        return;
-      }
-      try {
-        const notificationData = JSON.parse(event.data);
-        addNotification({
-          id: notificationData.id || Date.now(),
-          text: notificationData.message || 'Notificación de cambio de aceite'
-        });
-        // No sound for this stream
-      } catch (e) {
-        console.error("Error procesando mensaje del stream de cambios de aceite:", e);
-      }
-    };
-
-    oilChangeEventSource.onerror = (err) => {
-      console.error("Error en la conexión con el stream de cambios de aceite. Se cerrará la conexión.", err);
-      oilChangeEventSource.close();
-    };
-  }
-
-  function disconnectFromStreams() {
-    if (inspectionEventSource) {
-      inspectionEventSource.close();
-      inspectionEventSource = null;
-      console.log("Desconectado del stream de inspecciones.");
-    }
-    if (dataUpdateEventSource) {
-      dataUpdateEventSource.close();
-      dataUpdateEventSource = null;
-      console.log("Desconectado del stream de actualización de datos.");
-    }
-    if (soatRuntEventSource) {
-      soatRuntEventSource.close();
-      soatRuntEventSource = null;
-      console.log("Desconectado del stream SOAT/RUNT.");
-    }
-    if (oilChangeEventSource) {
-      oilChangeEventSource.close();
-      oilChangeEventSource = null;
-      console.log("Desconectado del stream de cambios de aceite.");
+  function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+      isAutoRefreshActive = false;
     }
   }
 
- // RUTA: App.svelte
+  function toggleAutoRefresh() {
+    isAutoRefreshEnabled = !isAutoRefreshEnabled;
+    if (isAutoRefreshEnabled) {
+      startAutoRefresh();
+    } else {
+      stopAutoRefresh();
+    }
+  }
 
-async function loadDataForView(view) { 
-  try { 
+  function handleActivateSound() {
+    console.log("🔊 [AUDIO] Activando sonido WebSocket por click del usuario...");
+    
+    activateWebSocketSound();
+    
+    // Update the WebSocket sound activation state
+    setWebSocketSoundNeedsActivation(false);
+    
+    console.log("Contexto de audio WebSocket activado por el usuario.");
+  }
+
+  // Sound activation state is now handled directly via unifiedSoundActivation store
+  // The template uses $getSoundNeedsActivation for reactivity
+
+  // WebSocket connection status monitoring is now handled via wsNotificationService store
+  $: {
+    const wsStatus = $wsNotificationService;
+    console.log("🔌 [APP] Estado WebSocket actualizado:", wsStatus);
+  }
+
+async function loadDataForView(view) {
+  try {
     switch (view) {
       case 'dashboard':
-        await data.fetchDashboardData(); 
+        await data.fetchDashboardData();
         break;
       case 'users':
         await data.fetchUsers();
@@ -368,33 +192,49 @@ async function loadDataForView(view) {
         await data.fetchOils();
         break;
     }
-  } catch (error) { 
+  } catch (error) {
     console.warn("Carga de datos interrumpida por fallo de autenticación (comportamiento esperado).");
   }
 }
 
   // --- LIFECYCLE HOOKS ---
   onMount(async () => {
+    console.log("🚀 [APP] Iniciando aplicación...");
     const isAuthenticated = await auth.checkAuth();
+    console.log("🚀 [APP] Estado de autenticación:", isAuthenticated ? "AUTENTICADO" : "NO AUTENTICADO");
+    
     if (isAuthenticated) {
       const currentView = get(ui).currentView;
+      console.log("🚀 [APP] Cargando vista actual:", currentView);
       loadDataForView(currentView);
+      
+      // Inicializar WebSocket notifications DESPUÉS de cargar datos iniciales
+      setTimeout(() => {
+        initializeWebSocketNotifications();
+        startAutoRefresh();
+        console.log("🚀 [APP] Notificaciones WebSocket y auto-refresh iniciados.");
+      }, 1000);
+    } else {
+      console.log("🚀 [APP] Usuario no autenticado - mostrando login");
     }
   });
 
   auth.subscribe(value => {
+    console.log("🚀 [APP] Cambio en estado de auth:", value.isAuthenticated ? "AUTENTICADO" : "NO AUTENTICADO");
+    
     if (value.isAuthenticated) {
-      connectToInspectionStream();
-      connectToDataUpdateStream();
-      connectToSoatRuntStream();
-      connectToOilChangeStream();
+      // No inicializar notificaciones aquí - ya se hizo en onMount
+      console.log("🚀 [APP] Usuario autenticado - ya iniciado en onMount");
     } else {
-      disconnectFromStreams();
+      console.log("🚀 [APP] Usuario desconectado - cerrando streams WebSocket");
+      disconnectFromWebSocket();
+      stopAutoRefresh();
     }
   });
   
   onDestroy(() => {
-    disconnectFromStreams();
+    disconnectFromWebSocket();
+    stopAutoRefresh();
   });
 
   // --- EVENT HANDLERS ---
@@ -411,6 +251,7 @@ async function loadDataForView(view) {
     const view = event.detail;
     ui.setCurrentView(view);
     loadDataForView(view);
+    // Don't restart auto-refresh on navigation to avoid conflicts with existing notification system
   }
 
   function handleCellContextMenu(event) {
@@ -455,8 +296,8 @@ function handleGridAction(event) {
 
 <svelte:window on:click={() => (showNotifications = false)} />
 
-{#if soundNeedsActivation && $auth.isAuthenticated}
-  <div class="sound-activation-overlay" on:click={activateSound}>
+{#if $soundNeedsActivation && $auth.isAuthenticated}
+  <div class="sound-activation-overlay" on:click={handleActivateSound}>
     <div class="message-box">
       <h2>Activar Sonido</h2>
       <p>Haga clic en cualquier lugar para habilitar las notificaciones de sonido.</p>
@@ -510,6 +351,16 @@ function handleGridAction(event) {
           </h2>
         </div>
         <div class="header-right">
+          <div class="auto-refresh-indicator">
+            <button class="auto-refresh-toggle" on:click={toggleAutoRefresh} title={isAutoRefreshEnabled ? 'Deshabilitar auto-refresh' : 'Habilitar auto-refresh'}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class:spinning={isAutoRefreshActive}>
+                <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M11,16.5L18,9.5L16.59,8.09L11,13.67L7.91,10.59L6.5,12L11,16.5Z" fill={isAutoRefreshEnabled ? "#4CAF50" : "#9E9E9E"}/>
+              </svg>
+            </button>
+            {#if isAutoRefreshActive}
+              <span class="auto-refresh-text">Refrescando...</span>
+            {/if}
+          </div>
           <div class="notification-wrapper" on:click|stopPropagation>
             <button class="notification-bell" on:click={toggleNotifications} title="Notificaciones">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12,22A2,2 0 0,0 14,20H10A2,2 0 0,0 12,22M18,16V11C18,7.93 16.36,5.36 13.5,4.68V4A1.5,1.5 0 0,0 12,2.5A1.5,1.5 0 0,0 10.5,4V4.68C7.63,5.36 6,7.93 6,11V16L4,18V19H20V18L18,16Z"></path></svg>
@@ -519,6 +370,15 @@ function handleGridAction(event) {
             </button>
             {#if showNotifications}
               <NotificationDropdown messages={$notificationMessages} on:delete={handleDeleteNotification} />
+            {/if}
+          </div>
+
+          <!-- WebSocket Connection Status -->
+          <div class="connection-status-indicator" title="Estado de conexión WebSocket">
+            {#if $wsNotificationService?.isConnected}
+              <div class="connection-status connected" title="Conectado - WebSocket"></div>
+            {:else}
+              <div class="connection-status disconnected" title="Desconectado"></div>
             {/if}
           </div>
           <span class="user-info">Usuario: {$auth.currentUser?.name}</span>
@@ -671,6 +531,57 @@ function handleGridAction(event) {
   .header-right {
     display: flex;
     align-items: center;
+    gap: 12px;
+  }
+
+  .auto-refresh-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .auto-refresh-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+  }
+
+  .auto-refresh-toggle:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .auto-refresh-toggle svg {
+    width: 20px;
+    height: 20px;
+    transition: transform 0.3s ease;
+  }
+
+  .auto-refresh-toggle svg.spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .auto-refresh-text {
+    font-size: 10px;
+    color: #4CAF50;
+    font-weight: bold;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
   }
   .header-left, .logo {
     display: flex;
@@ -727,6 +638,44 @@ function handleGridAction(event) {
   }
   .message-box h2 {
     margin: 0 0 12px 0;
+  }
+
+  /* WebSocket Connection Status Indicator */
+  .connection-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+
+  .connection-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+  }
+
+  .connection-status.connected {
+    background-color: #4CAF50;
+    animation: pulse-connected 2s ease-in-out infinite;
+  }
+
+  .connection-status.disconnected {
+    background-color: #F44336;
+    animation: pulse-disconnected 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-connected {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+  }
+
+  @keyframes pulse-disconnected {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.9); }
   }
 </style>
 
