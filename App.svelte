@@ -73,7 +73,7 @@
 
   // --- AUTO REFRESH FUNCTIONS ---
   let lastRefreshTime = 0;
-  const MIN_REFRESH_INTERVAL = 60000; // 1 minute minimum between refreshes
+  const MIN_REFRESH_INTERVAL = 10000; // 10 seconds minimum between refreshes
 
   function startAutoRefresh() {
     if (autoRefreshInterval) {
@@ -130,7 +130,7 @@
           isAutoRefreshActive = false;
         }
       }
-    }, 60000); // Check every 1 minute, refresh if 1 minute has passed
+    }, 300000); // Check every 5 minutes, refresh if 10 seconds have passed
   }
 
   function stopAutoRefresh() {
