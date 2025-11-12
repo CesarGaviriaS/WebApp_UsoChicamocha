@@ -68,13 +68,17 @@ let audioCtx = null;
 
 // WebSocket URL builder
 function buildWebSocketUrl() {
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-  const host = window.location.hostname;
-  // FORZAR EL PUERTO 8080 PARA EL BACKEND WEBSTOCKET
-  const backendPort = 8080;
-  const path = '/ws';
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL;
   
-  return `${protocol}//${host}:${backendPort}${path}`;
+  // Use the backend URL from environment variables
+  const baseUrl = BASE_URL.replace(/\/$/, ''); // Remove trailing slash
+  const wsPath = '/ws';
+  
+  // Convert HTTPS/HTTP to WSS/WS for WebSocket protocol
+  const protocol = baseUrl.startsWith('https:') ? 'wss:' : 'ws:';
+  const host = baseUrl.replace(/^https?:\/\//, '');
+  
+  return `${protocol}//${host}${wsPath}`;
 }
 
 // Initialize WebSocket notifications with SockJS + STOMP
@@ -85,7 +89,7 @@ export function initializeWebSocketNotifications() {
   console.log(`🚀 [WEBSOCKET] === INICIO DE INICIALIZACIÓN SOCKJS + STOMP === ${timestamp}`);
   console.log(`🚀 [WEBSOCKET] Token disponible: ${token ? 'SÍ' : 'NO'}`);
   console.log(`🚀 [WEBSOCKET] WebSocket URL: ${buildWebSocketUrl()}`);
-  console.log(`🚀 [WEBSOCKET] 🔍 URL ACTUAL: ${buildWebSocketUrl()} (DEBERÍA SER localhost:8080/ws)`);
+  console.log(`🚀 [WEBSOCKET] 🔍 URL ACTUAL: ${buildWebSocketUrl()} (usando backend URL desde environment)`);
   console.log(`🚀 [WEBSOCKET] Auth state: ${get(auth).isAuthenticated ? 'AUTENTICADO' : 'NO AUTENTICADO'}`);
   console.log(`🚀 [WEBSOCKET] 🧪 MODO DEBUG HABILITADO`);
   
