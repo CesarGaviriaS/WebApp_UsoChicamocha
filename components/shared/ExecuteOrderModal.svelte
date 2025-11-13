@@ -52,9 +52,9 @@
     if (!isFormValid) return; // Evita envío si es inválido
 
     const sparePartPayload = {
-      ref: spareParts.map(p => p.ref).join('|'),
-      name: spareParts.map(p => p.name).join('|'),
-      quantity: spareParts.map(p => p.quantity).join('|'),
+      ref: spareParts.map(p => p.ref).join(' - '),
+      name: spareParts.map(p => p.name).join(' - '),
+      quantity: spareParts.map(p => p.quantity).join(' - '),
       price: spareParts.reduce((sum, p) => sum + (Number(p.price) || 0), 0)
     };
 
@@ -72,7 +72,7 @@
   function onCancel() {
     dispatch('cancel');
   }
-  const orderFields = workOrder.order.description.split('|');
+  const orderFields = workOrder.order.description.split(' - ');
   const tipo = orderFields[0]?.trim() || '';
   const sector = orderFields[1]?.trim() || '';
   const estado = orderFields[2]?.trim() || '';
