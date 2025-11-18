@@ -100,132 +100,132 @@ export const machineColumns = [
  },
 ];
 export const dashboardColumns = [
-  {
-   accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }),
-   id: "fecha",
-   header: "Fecha",
-  
-  },
-  {
-   accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleTimeString('en-GB', { timeZone: 'America/Bogota' }), // Formato 24h
-   id: "hora",
-   header: "Hora",
-  
-  },
-  {
-   accessorFn: (row) => `${row.machine.name} ${row.machine.model} ${row.machine.numInterIdentification}`,
-   id: "maquina",
-   header: "MÁQUINA",
-  
-  },
-  { accessorKey: "hourMeter", header: "Horómetro", size: 80 },
-  {
-   accessorKey: "leakStatus",
-   header: "Fugas Sistema",
-  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "brakeStatus",
-   header: "Sistema Frenos",
+ {
+ accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }),
+ id: "fecha",
+ header: "Fecha",
  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "beltsPulleysStatus",
-   header: "Correas y Poleas",
-  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "tireLanesStatus",
-   header: "Llantas/ Carriles",
-  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "carIgnitionStatus",
-   header: "Sistema Encendido",
-  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "electricalStatus",
-   header: "Sistema Eléctrico",
+ },
+ {
+ accessorFn: (row) => new Date(row.dateStamp + 'Z').toLocaleTimeString('en-GB', { timeZone: 'America/Bogota' }), // Formato 24h
+ id: "hora",
+ header: "Hora",
  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "mechanicalStatus",
-   header: "Sistema Mecánico",
-  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "temperatureStatus",
-   header: "Nivel Temperatura",
+ },
+ {
+ accessorFn: (row) => `${row.machine.name} ${row.machine.model} ${row.machine.numInterIdentification}`,
+ id: "maquina",
+ header: "MÁQUINA",
  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "oilStatus",
-   header: "Nivel Aceite",
+ },
+ { accessorKey: "hourMeter", header: "Horómetro", size: 80 },
+ {
+ accessorKey: "leakStatus",
+ header: "Fugas Sistema",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "brakeStatus",
+ header: "Sistema Frenos",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "beltsPulleysStatus",
+ header: "Correas y Poleas",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "tireLanesStatus",
+ header: "Llantas/ Carriles",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "carIgnitionStatus",
+ header: "Sistema Encendido",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "electricalStatus",
+ header: "Sistema Eléctrico",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "mechanicalStatus",
+ header: "Sistema Mecánico",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "temperatureStatus",
+ header: "Nivel Temperatura",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "oilStatus",
+ header: "Nivel Aceite",
 
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "hydraulicStatus",
-   header: "Nivel Hidráulico",
-  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "coolantStatus",
-   header: "Nivel Refrigerante",
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "hydraulicStatus",
+ header: "Nivel Hidráulico",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "coolantStatus",
+ header: "Nivel Refrigerante",
 
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "structuralStatus",
-   header: "Estado Estructural",
-  
-   meta: { isStatus: true },
-  },
-  {
-   accessorKey: "expirationDateFireExtinguisher",
-   header: "Vigencia Extintor",
-  
-   meta: { isDateStatus: true },
-  },
-  {
-   accessorKey: "observations",
-   header: "Observaciones/Detalles/Comentarios ",
-   size:200,
-   meta: { isMultiline: true },
-  },
-  {
-   accessorKey: "greasingAction",
-   header: "Acción de Engrase",
-  
-  },
-  {
-   accessorKey: "greasingObservations",
-   header: "Observaciones/Detalles/Comentarios de Engrase ",
-   size: 350,
-   meta: { isMultiline: true },
-  },
-  {
-   accessorFn: (row) => row.user.fullName,
-   id: "responsable",
-   header: "Responsable",
-  
-  },
-  
-  {
-    id: "view_images",
-    header: "Imágenes",
-    meta: { isImageAction: true }, 
-  },
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "structuralStatus",
+ header: "Estado Estructural",
+ 
+ meta: { isStatus: true },
+ },
+ {
+ accessorKey: "expirationDateFireExtinguisher",
+ header: "Vigencia Extintor",
+ 
+ meta: { isDateStatus: true },
+ },
+ {
+ accessorKey: "observations",
+ header: "Observaciones/Detalles/Comentarios ",
+ size:200,
+ meta: { isMultiline: true },
+ },
+ {
+ accessorKey: "greasingAction",
+ header: "Acción de Engrase",
+ 
+ },
+ {
+ accessorKey: "greasingObservations",
+ header: "Observaciones/Detalles/Comentarios de Engrase ",
+ size: 350,
+ meta: { isMultiline: true },
+ },
+ {
+ accessorFn: (row) => row.user.fullName,
+ id: "responsable",
+ header: "Responsable",
+ 
+ },
+ 
+ {
+   id: "view_images",
+   header: "Imágenes",
+   meta: { isImageAction: true }, 
+ },
 ];
  
 
@@ -378,6 +378,13 @@ export const curriculumColumns = [
             id: 'mano_obra_valor',
             header: "VALOR ($)",
             size: 120,
+        },
+        {
+            accessorFn: (row) => row.labor?.observations || 'N/A',
+            id: 'mano_obra_observaciones',
+            header: "OBSERVACIONES",
+            size: 200,
+            meta: { isMultiline: true },
         }
     ]
   },

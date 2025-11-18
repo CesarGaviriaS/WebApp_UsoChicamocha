@@ -10,10 +10,10 @@
   let description = '';
 
   let labor = {
-    price: '0',
-    sameMecanic: true,
-    contractor: '',
-    observations: ''
+    price: workOrder.labor?.price?.toString() || '0',
+    sameMecanic: workOrder.labor?.sameMecanic || true,
+    contractor: workOrder.labor?.contractor || '',
+    observations: workOrder.labor?.observations || ''
   };
 
   let spareParts = [
@@ -72,7 +72,7 @@
   function onCancel() {
     dispatch('cancel');
   }
-  const orderFields = workOrder.order.description.split(' - ');
+  const orderFields = workOrder.order.description.split('|');
   const tipo = orderFields[0]?.trim() || '';
   const sector = orderFields[1]?.trim() || '';
   const estado = orderFields[2]?.trim() || '';
