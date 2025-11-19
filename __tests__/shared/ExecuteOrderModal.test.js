@@ -18,6 +18,8 @@ import ExecuteOrderModal from '../../components/shared/ExecuteOrderModal.svelte'
  * - has cancel button: Verifica que el modal tenga un botón de cancelar.
  * - handles checkbox for same mechanic: Verifica que se maneje correctamente el checkbox para el mismo mecánico.
  * - renders info panel with correct data: Verifica que se renderice el panel informativo con datos correctos.
+ * - prevents double-click on submit button: Verifica que no se pueda hacer doble clic en el botón de ejecutar.
+ * - handles empty labor price as 0: Verifica que el precio de mano de obra vacío se envíe como 0.
  */
 describe('ExecuteOrderModal', () => {
   const mockWorkOrder = {
@@ -190,5 +192,93 @@ describe('ExecuteOrderModal', () => {
 
     expect(screen.getByText('Detalles de la Orden Original')).toBeTruthy();
     expect(screen.getByText('Test Machine - Model X')).toBeTruthy();
+  });
+
+  /**
+   * @test prevents double-click on submit button.
+   * Verifica que no se pueda hacer doble clic en el botón de ejecutar.
+   */
+  it('prevents double-click on submit button', async () => {
+    const { component } = render(ExecuteOrderModal, {
+      props: { workOrder: mockWorkOrder }
+    });
+
+    let executeCount = 0;
+    component.$on('execute', () => {
+      executeCount++;
+    });
+
+    await tick();
+
+    // Llenar el formulario con datos válidos
+    const timeInput = screen.getByLabelText('Tiempo Empleado (ej. 2 horas, 30 mins):');
+    const descriptionInput = screen.getByLabelText('Descripción / Detalles del Trabajo Realizado:');
+    const priceInput = screen.getByLabelText('Precio:');
+    const refInput = screen.getByLabelText('Referencia:');
+    const nameInput = screen.getByLabelText('Nombre:');
+    const quantityInput = screen.getByLabelText('Cantidad:');
+    const sparePartPriceInput = screen.getByLabelText('Precio total:');
+
+    await fireEvent.input(timeInput, { target: { value: '2 horas' } });
+    await fireEvent.input(descriptionInput, { target: { value: 'Trabajo realizado' } });
+    await fireEvent.input(priceInput, { target: { value: '100' } });
+    await fireEvent.input(refInput, { target: { value: 'REF001' } });
+    await fireEvent.input(nameInput, { target: { value: 'Repuesto 1' } });
+    await fireEvent.input(quantityInput, { target: { value: '1' } });
+    await fireEvent.input(sparePartPriceInput, { target: { value: '50' } });
+
+    await tick();
+
+    const submitButton = screen.getByText('Ejecutar y Completar Orden');
+    
+    // Hacer clic múltiples veces rápidamente
+    await fireEvent.click(submitButton);
+    await fireEvent.click(submitButton);
+    await fireEvent.click(submitButton);
+
+    // Solo debería haberse ejecutado una vez
+    expect(executeCount).toBe(1);
+  });
+
+  /**
+   * @test handles empty labor price as 0.
+   * Verifica que el precio de mano de obra vacío se envíe como 0.
+   */
+  it('handles empty labor price as 0', async () => {
+    const { component } = render(ExecuteOrderModal, {
+      props: { workOrder: mockWorkOrder }
+    });
+
+    let executedPayload = null;
+    component.$on('execute', (event) => {
+      executedPayload = event.detail;
+    });
+
+    await tick();
+
+    // Llenar el formulario sin precio de mano de obra
+    const timeInput = screen.getByLabelText('Tiempo Empleado (ej. 2 horas, 30 mins):');
+    const descriptionInput = screen.getByLabelText('Descripción / Detalles del Trabajo Realizado:');
+    const refInput = screen.getByLabelText('Referencia:');
+    const nameInput = screen.getByLabelText('Nombre:');
+    const quantityInput = screen.getByLabelText('Cantidad:');
+    const sparePartPriceInput = screen.getByLabelText('Precio total:');
+
+    await fireEvent.input(timeInput, { target: { value: '2 horas' } });
+    await fireEvent.input(descriptionInput, { target: { value: 'Trabajo realizado' } });
+    await fireEvent.input(refInput, { target: { value: 'REF001' } });
+    await fireEvent.input(nameInput, { target: { value: 'Repuesto 1' } });
+    await fireEvent.input(quantityInput, { target: { value: '1' } });
+    await fireEvent.input(sparePartPriceInput, { target: { value: '50' } });
+
+    await tick();
+
+    const submitButton = screen.getByText('Ejecutar y Completar Orden');
+    await fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(executedPayload).toBeTruthy();
+      expect(executedPayload.labor.price).toBe(0);
+    });
   });
 });

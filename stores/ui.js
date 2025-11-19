@@ -54,7 +54,11 @@ function createUIStore() {
     showWorkOrderModal: false,
     selectedRowData: null,
     selectedColumnDef: null,
-    isSaving: false
+    isSaving: false,
+    // Image Modal State
+    showImageModal: false,
+    imageModalUrls: [],
+    isImageModalLoading: false
   });
 
   return {
@@ -82,7 +86,13 @@ function createUIStore() {
       selectedColumnDef: null
     })),
 
-    setSaving: (isSaving) => update(store => ({ ...store, isSaving }))
+    setSaving: (isSaving) => update(store => ({ ...store, isSaving })),
+
+    // Image Modal Actions
+    openImageModal: () => update(store => ({ ...store, showImageModal: true, imageModalUrls: [], isImageModalLoading: false })),
+    closeImageModal: () => update(store => ({ ...store, showImageModal: false, imageModalUrls: [] })),
+    setImageModalLoading: (isLoading) => update(store => ({ ...store, isImageModalLoading: isLoading })),
+    setImageModalUrls: (urls) => update(store => ({ ...store, imageModalUrls: urls }))
   };
 }
 

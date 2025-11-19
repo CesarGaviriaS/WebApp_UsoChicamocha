@@ -1,36 +1,29 @@
 <script>
-  import { createEventDispatcher } from "svelte";
-
-  export let activeView = "dashboard";
-
-  const dispatch = createEventDispatcher();
-
-  function navigate(view) {
-    dispatch("navigate", view);
-  }
+  import { link, location } from "svelte-spa-router";
+  import active from "svelte-spa-router/active";
 </script>
 
 <nav class="sidebar">
   <!-- Botón de Dashboard -->
-  <button
+  <a
     class="nav-item"
-    data-view="dashboard"
-    on:click={() => navigate("dashboard")}
-    class:active={activeView === "dashboard"}
+    href="/"
+    use:link
+    use:active={{ path: "/", className: "active" }}
     title="Dashboard"
   >
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
       <path d="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" />
     </svg>
     <span class="nav-text">Dashboard</span>
-  </button>
+  </a>
 
   <!-- Botón de Usuarios -->
-  <button
+  <a
     class="nav-item"
-    data-view="users"
-    on:click={() => navigate("users")}
-    class:active={activeView === "users"}
+    href="/users"
+    use:link
+    use:active={{ path: "/users", className: "active" }}
     title="Gestionar Usuarios"
   >
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -39,14 +32,14 @@
       />
     </svg>
     <span class="nav-text">Usuarios</span>
-  </button>
+  </a>
 
   <!-- Botón de Máquinas -->
-  <button
+  <a
     class="nav-item"
-    data-view="machines"
-    on:click={() => navigate("machines")}
-    class:active={activeView === "machines"}
+    href="/machines"
+    use:link
+    use:active={{ path: "/machines", className: "active" }}
     title="Gestionar Máquinas"
   >
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -55,14 +48,14 @@
       />
     </svg>
     <span class="nav-text">Máquinas</span>
-  </button>
+  </a>
 
   <!-- Botón de Órdenes de Trabajo -->
-  <button
+  <a
     class="nav-item"
-    data-view="work-orders"
-    on:click={() => navigate("work-orders")}
-    class:active={activeView === "work-orders"}
+    href="/work-orders"
+    use:link
+    use:active={{ path: "/work-orders", className: "active" }}
     title="Órdenes de Trabajo"
   >
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -71,36 +64,61 @@
       />
     </svg>
     <span class="nav-text">Órdenes</span>
-  </button>
+  </a>
 
   <!-- Botón de Consolidado -->
-  <button
+  <a
     class="nav-item"
-    data-view="consolidado"
-    on:click={() => navigate("consolidado")}
-    class:active={activeView === "consolidado"}
+    href="/consolidado"
+    use:link
+    use:active={{ path: "/consolidado", className: "active" }}
     title="Consolidado"
   >
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-      <path d="M6 2H14L20 8V20C20 21.1 19.1 22 18 22H6C4.9 22 4 21.1 4 20V4C4 2.9 4.9 2 6 2Z" fill="none" stroke="currentColor" stroke-width="2" />
-      <path d="M18 2C18 2 15 6 15 9A3 3 0 0 0 21 9C21 6 18 2 18 2Z" fill="currentColor" />
-      <path d="M8 11L12 9L16 11V15L12 17L8 15Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-      <circle cx="12" cy="13" r="1.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+      <path
+        d="M6 2H14L20 8V20C20 21.1 19.1 22 18 22H6C4.9 22 4 21.1 4 20V4C4 2.9 4.9 2 6 2Z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      />
+      <path
+        d="M18 2C18 2 15 6 15 9A3 3 0 0 0 21 9C21 6 18 2 18 2Z"
+        fill="currentColor"
+      />
+      <path
+        d="M8 11L12 9L16 11V15L12 17L8 15Z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linejoin="round"
+      />
+      <circle
+        cx="12"
+        cy="13"
+        r="1.5"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.4"
+      />
     </svg>
     <span class="nav-text">Consolidado</span>
-  </button>
+  </a>
 
-  <button
+  <a
     class="nav-item"
-    on:click={() => navigate("oilManagement")}
-    class:active={activeView === "oilManagement"}
+    href="/oil-management"
+    use:link
+    use:active={{ path: "/oil-management", className: "active" }}
     title="Gestión de Aceites"
   >
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-      <path d="M12 2C12 2 7 9 7 13A5 5 0 0 0 17 13C17 9 12 2 12 2Z" fill="currentColor"/>
+      <path
+        d="M12 2C12 2 7 9 7 13A5 5 0 0 0 17 13C17 9 12 2 12 2Z"
+        fill="currentColor"
+      />
     </svg>
     <span class="nav-text">Aceites</span>
-  </button>
+  </a>
 </nav>
 
 <style>
@@ -133,6 +151,9 @@
     align-items: center;
     padding: 0 18px;
     gap: 20px;
+    text-decoration: none;
+    color: inherit;
+    box-sizing: border-box; /* Ensure padding doesn't affect width */
   }
   .nav-item:first-child {
     border-top: none;
@@ -142,7 +163,7 @@
     background: linear-gradient(to bottom, #ffffff 0%, #e0e0e0 100%);
   }
   .nav-item:active,
-  .nav-item.active {
+  :global(.nav-item.active) {
     background: #c0c0c0;
     border-top-color: #808080;
   }

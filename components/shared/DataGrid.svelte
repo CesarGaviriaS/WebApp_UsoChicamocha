@@ -141,7 +141,7 @@
                 {#if !header.isPlaceholder}
                   {@const content = flexRender(
                     header.column.columnDef.header,
-                    header.getContext()
+                    header.getContext(),
                   )}
                   <div class="header-content">
                     {#if typeof content === "string"}
@@ -193,11 +193,15 @@
                   </div>
                 {:else if cell.column.columnDef.meta?.isExecuteAction}
                   <div class="actions-cell">
-                    <button
-                      class="btn-action btn-execute"
-                      on:click={() => handleAction("execute", row.original)}
-                      >Ejecutar</button
-                    >
+                    {#if row.original.order?.status?.toUpperCase() !== "DONE"}
+                      <button
+                        class="btn-action btn-execute"
+                        on:click={() => handleAction("execute", row.original)}
+                        >Ejecutar</button
+                      >
+                    {:else}
+                      <span class="status-text executed">EJECUTADA</span>
+                    {/if}
                   </div>
                 {:else if cell.column.columnDef.meta?.isCvAction}
                   <div class="actions-cell">
@@ -236,7 +240,7 @@
                   <svelte:component
                     this={flexRender(
                       cell.column.columnDef.cell,
-                      cell.getContext()
+                      cell.getContext(),
                     )}
                   />
                 {/if}
@@ -440,6 +444,14 @@
 
   .status-text {
     font-weight: bold;
+  }
+
+  .executed {
+    color: #2e7d32;
+    font-size: 10px;
+    text-align: center;
+    display: block;
+    width: 100%;
   }
 
   .origin-inspeccion,

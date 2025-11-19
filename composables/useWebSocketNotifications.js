@@ -616,7 +616,6 @@ export function activateSound() {
   if (!audioCtx) {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      setWebSocketSoundNeedsActivation(false);
       console.log("🔊 [AUDIO] Contexto de audio WebSocket activado exitosamente.");
     } catch(e) {
       console.error("❌ [AUDIO] Web Audio API no es soportada:", e.message);
@@ -624,7 +623,11 @@ export function activateSound() {
     }
   } else {
     console.log("🔊 [AUDIO] Contexto de audio ya existía, activándolo...");
-    setWebSocketSoundNeedsActivation(false);
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => {
+        console.log("🔊 [AUDIO] Contexto de audio reanudado.");
+      });
+    }
   }
 }
 
@@ -639,7 +642,6 @@ export function playNotificationSound() {
     console.log("🔊 [AUDIO] Reanudando contexto de audio...");
     audioCtx.resume();
   }
-
   const now = audioCtx.currentTime;
   const duration = 0.8; // Sonido corto y limpio: 0.8 segundos
 

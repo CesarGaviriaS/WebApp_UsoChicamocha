@@ -29,6 +29,7 @@
     "event-source-polyfill": "^1.0.31",
     "jwt-decode": "^4.0.0",
     "lucide-svelte": "^0.400.0",
-    "sockjs-client": "^1.6.1"
+    "sockjs-client": "^1.6.1",
+    "svelte-spa-router": "^4.0.1"
   }
 }
